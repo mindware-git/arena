@@ -1,0 +1,52 @@
+[gd_scene format=3 uid="uid://dfimml40xqobd"]
+
+[ext_resource type="Script" uid="uid://day0mn4ib3ncm" path="res://addons/virtual_joystick/virtual_joystick_instantiator.gd" id="1_dy3po"]
+
+[node name="BattleHud" type="CanvasLayer" unique_id=1471125204]
+
+[node name="Control" type="Control" parent="." unique_id=807526424]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Control" type="Control" parent="Control" unique_id=1528889995]
+layout_mode = 1
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_top = -40.0
+offset_right = 40.0
+grow_vertical = 0
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Control/Control" unique_id=1465307243]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="TouchScreenButton" type="TouchScreenButton" parent="Control/Control/HBoxContainer" unique_id=1598313973]
+
+[node name="JoystickControl" type="Control" parent="Control" unique_id=570372762]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -20.0
+offset_top = -40.0
+offset_right = 20.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="Virtual Joystick" type="Control" parent="Control/JoystickControl" unique_id=732345998]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_dy3po")
+metadata/_custom_type_script = "uid://day0mn4ib3ncm"
