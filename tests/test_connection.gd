@@ -5,9 +5,9 @@ extends GutTest
 # NakamaMultiplayerBridge를 통한 서버 연결 테스트
 # ═══════════════════════════════════════════════════════════════════════════════
 
-const SERVER_KEY := "defaultkey"
-const HOST := "127.0.0.1"
-const PORT := 7350
+var SERVER_KEY := NetworkConfig.SERVER_KEY
+var HOST := NetworkConfig.get_host()
+var PORT := NetworkConfig.PORT
 const TIMEOUT := 5.0
 
 var _client: NakamaClient

@@ -5,9 +5,9 @@ extends GutTest
 # 자동 매치메이킹 테스트 - 두 플레이어가 매칭되는 과정 검증
 # ═══════════════════════════════════════════════════════════════════════════════
 
-const SERVER_KEY := "defaultkey"
-const HOST := "127.0.0.1"
-const PORT := 7350
+var SERVER_KEY := NetworkConfig.SERVER_KEY
+var HOST := NetworkConfig.get_host()
+var PORT := NetworkConfig.PORT
 const TIMEOUT := 30.0
 
 # Player A

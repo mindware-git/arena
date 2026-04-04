@@ -5,9 +5,9 @@ extends GutTest
 # 유저 데이터 저장/읽기 + 권한 + Progression Template 패턴
 # ═══════════════════════════════════════════════════════════════════════════════
 
-const SERVER_KEY := "defaultkey"
-const HOST := "127.0.0.1"
-const PORT := 7350
+var SERVER_KEY := NetworkConfig.SERVER_KEY
+var HOST := NetworkConfig.get_host()
+var PORT := NetworkConfig.PORT
 const TIMEOUT := 10.0
 
 # Player A
