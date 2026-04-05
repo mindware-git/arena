@@ -18,7 +18,10 @@ config/icon="res://icon.svg"
 [autoload]
 
 Nakama="*uid://da4041n40wpf3"
-GameManager="*uid://be3h38syk5s23"
+Online="*res://scripts/autoload/Online.gd"
+OnlineMatch="*res://scripts/autoload/OnlineMatch.gd"
+GameState="*res://scripts/autoload/GameState.gd"
+GameManager="*res://scripts/autoload/GameManager.gd"
 
 [display]
 

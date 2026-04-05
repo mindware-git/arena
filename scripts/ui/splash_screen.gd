@@ -66,6 +66,6 @@ func _create_ui() -> void:
 
 
 func _on_start_pressed() -> void:
-	# LobbyScreen으로 전환
-	var lobby := LobbyScreen.new()
-	transition_requested.emit(lobby)
+	# LoginScreen으로 전환 (Nakama 인증)
+	var login := LoginScreen.new()
+	transition_requested.emit(login)

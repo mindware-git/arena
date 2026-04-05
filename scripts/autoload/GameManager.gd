@@ -1,11 +1,24 @@
 extends Node
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# GameManager.gd
+# Autoload singleton for game flow and lifecycle management
+# Responsibilities:
+#   - 게임 상태 전환 (MAIN_MENU, MATCHING, PLAYING, PAUSED, RESULT)
+#   - 매치 시작/종료 및 플레이어 관리
+#   - 전역 게임 상태 신호 발행
+# Autoload load order:
+#   1. Online: Nakama 서버 연결
+#   2. OnlineMatch: 매칭/플레이어 상태
+#   3. GameManager: 게임 루프/상태 머신
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Enums
 # ═══════════════════════════════════════════════════════════════════════════════
 
 ## 게임 상태
-enum GameState {
+enum ManagerGameState {
 	NONE,              ## 초기 상태
 	LOADING,           ## 리소스 로딩
 	MAIN_MENU,         ## 메인 메뉴
@@ -110,7 +123,7 @@ class MapData:
 # Signals
 # ═══════════════════════════════════════════════════════════════════════════════
 
-signal state_changed(old_state: GameState, new_state: GameState)
+signal state_changed(old_state: ManagerGameState, new_state: ManagerGameState)
 signal match_started(match_data: MatchData)
 signal match_ended(result: MatchResult)
 signal player_joined(player: PlayerData)
@@ -120,8 +133,8 @@ signal player_left(player_id: String)
 # State
 # ═══════════════════════════════════════════════════════════════════════════════
 
-var current_state: GameState = GameState.NONE
-var previous_state: GameState = GameState.NONE
+var current_state: ManagerGameState = ManagerGameState.NONE
+var previous_state: ManagerGameState = ManagerGameState.NONE
 var current_match: MatchData = null
 var current_map: MapData = null
 var players: Array[PlayerData] = []
@@ -136,15 +149,15 @@ func _ready() -> void:
 
 
 func _initialize() -> void:
-	change_state(GameState.LOADING)
+	change_state(ManagerGameState.LOADING)
 	# 리소스 로드 완료 후
-	change_state(GameState.MAIN_MENU)
+	change_state(ManagerGameState.MAIN_MENU)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # State Management
 # ═══════════════════════════════════════════════════════════════════════════════
 
-func change_state(new_state: GameState) -> bool:
+func change_state(new_state: ManagerGameState) -> bool:
 	if current_state == new_state:
 		return false
 	
@@ -154,11 +167,11 @@ func change_state(new_state: GameState) -> bool:
 	return true
 
 
-func get_current_state() -> GameState:
+func get_current_state() -> ManagerGameState:
 	return current_state
 
 
-func get_previous_state() -> GameState:
+func get_previous_state() -> ManagerGameState:
 	return previous_state
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -166,29 +179,29 @@ func get_previous_state() -> GameState:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 func start_match(mode: MatchMode, map_id: String) -> bool:
-	if current_state != GameState.CHARACTER_SELECT:
+	if current_state != ManagerGameState.CHARACTER_SELECT:
 		return false
 	
 	current_match = MatchData.new()
 	current_match.mode = mode
 	current_match.map_id = map_id
 	
-	change_state(GameState.PLAYING)
+	change_state(ManagerGameState.PLAYING)
 	match_started.emit(current_match)
 	return true
 
 
 func end_match(result: MatchResult) -> void:
-	if current_state != GameState.PLAYING:
+	if current_state != ManagerGameState.PLAYING:
 		return
 	
-	change_state(GameState.RESULT)
+	change_state(ManagerGameState.RESULT)
 	match_ended.emit(result)
 
 
 func cancel_match() -> void:
 	current_match = null
-	change_state(GameState.MAIN_MENU)
+	change_state(ManagerGameState.MAIN_MENU)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Player Management
@@ -231,16 +244,16 @@ func get_players_by_team(team_id: int) -> Array[PlayerData]:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 func pause_game() -> bool:
-	if current_state != GameState.PLAYING:
+	if current_state != ManagerGameState.PLAYING:
 		return false
 	get_tree().paused = true
-	change_state(GameState.PAUSED)
+	change_state(ManagerGameState.PAUSED)
 	return true
 
 
 func resume_game() -> bool:
-	if current_state != GameState.PAUSED:
+	if current_state != ManagerGameState.PAUSED:
 		return false
 	get_tree().paused = false
-	change_state(GameState.PLAYING)
+	change_state(ManagerGameState.PLAYING)
 	return true

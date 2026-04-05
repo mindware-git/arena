@@ -7,12 +7,16 @@ extends Control
 # ═══════════════════════════════════════════════════════════════════════════════
 
 signal transition_requested(next_screen: Node)
+signal timeout_occurred()
 
 var _elapsed_time: float = 0.0
 var _is_matching: bool = false
 var _time_label: Label
 var _status_label: Label
 var _cancel_btn: Button
+var _matching_timeout: float = 30.0  # 30초 타임아웃
+var _retry_count: int = 0
+var _max_retries: int = 3
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Lifecycle
@@ -28,6 +32,10 @@ func _process(delta: float) -> void:
 	if _is_matching:
 		_elapsed_time += delta
 		_update_time_display()
+		
+		# 타임아웃 체크 (30초)
+		if _elapsed_time >= _matching_timeout:
+			_on_matching_timeout()
 
 
 func _create_ui() -> void:
@@ -140,17 +148,35 @@ func _start_matching() -> void:
 	_is_matching = true
 	_elapsed_time = 0.0
 	_status_label.text = "플레이어 찾는 중..."
-
-
-func _update_time_display() -> void:
-	@warning_ignore("integer_division")
-	var minutes := int(_elapsed_time) / 60
-	var seconds := int(_elapsed_time) % 60
-	_time_label.text = "%02d:%02d" % [minutes, seconds]
+	_cancel_btn.text = "취소"
+	_cancel_btn.disabled = false
 	
-	# 5초 후 자동으로 캐릭터 선택으로 (테스트용)
-	if _elapsed_time >= 3.0:
-		_on_match_found()
+	# Nakama 소켓 연결
+	if not Online.is_nakama_socket_connected():
+		Online.connect_nakama_socket()
+		var socket = await Online.socket_connected
+		if not socket:
+			_on_match_error("소켓 연결 실패")
+			return
+	
+	# 매칭메이커 시작
+	OnlineMatch.start_matchmaking(Online.nakama_socket)
+	
+	# 매칭 완료 신호 대기
+	OnlineMatch.match_ready.connect(_on_match_ready)
+	OnlineMatch.error.connect(_on_match_error)
+
+
+func _on_match_ready(players: Dictionary) -> void:
+	_on_match_found()
+
+
+func _on_match_error(message: String) -> void:
+	_is_matching = false
+	_status_label.text = "매칭 실패: " + message
+	_status_label.add_theme_color_override("font_color", Color(1.0, 0.5, 0.5))
+	_cancel_btn.text = "재시도"
+	_cancel_btn.disabled = false
 
 
 func _on_match_found() -> void:
@@ -168,6 +194,35 @@ func _on_match_found() -> void:
 
 func _on_cancel_pressed() -> void:
 	_is_matching = false
+	OnlineMatch.leave()
 	# Lobby로 복귀
 	var lobby := LobbyScreen.new()
 	transition_requested.emit(lobby)
+
+
+func _on_matching_timeout() -> void:
+	_is_matching = false
+	_status_label.text = "매칭 타임아웃 (30초)"
+	_status_label.add_theme_color_override("font_color", Color(1.0, 0.7, 0.2))
+	_cancel_btn.text = "재시도"
+	_cancel_btn.disabled = false
+	OnlineMatch.leave()
+	
+	_retry_count += 1
+	timeout_occurred.emit()
+	
+	# 재시도 횟수 초과 시
+	if _retry_count >= _max_retries:
+		await get_tree().create_timer(2.0).timeout
+		_status_label.text = "매칭 실패 - 메뉴로 돌아갑니다"
+		_cancel_btn.disabled = true
+		await get_tree().create_timer(2.0).timeout
+		var lobby := LobbyScreen.new()
+		transition_requested.emit(lobby)
+
+
+func _update_time_display() -> void:
+	@warning_ignore("integer_division")
+	var minutes := int(_elapsed_time) / 60
+	var seconds := int(_elapsed_time) % 60
+	_time_label.text = "%02d:%02d" % [minutes, seconds]
