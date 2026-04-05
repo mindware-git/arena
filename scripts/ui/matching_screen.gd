@@ -172,7 +172,7 @@ func _start_matching() -> void:
 	OnlineMatch.error.connect(_on_match_error)
 
 
-func _on_match_ready(players: Dictionary) -> void:
+func _on_match_ready(_players: Dictionary) -> void:
 	_on_match_found()
 
 

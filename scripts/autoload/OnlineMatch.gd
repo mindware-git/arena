@@ -131,9 +131,8 @@ func _set_nakama_socket(_nakama_socket: NakamaSocket) -> void:
 
 
 func _ready() -> void:
-	var tree = get_tree()
-	tree.connect("network_peer_connected", Callable(self, "_on_network_peer_connected"))
-	tree.connect("network_peer_disconnected", Callable(self, "_on_network_peer_disconnected"))
+	multiplayer.peer_connected.connect(_on_network_peer_connected)
+	multiplayer.peer_disconnected.connect(_on_network_peer_disconnected)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

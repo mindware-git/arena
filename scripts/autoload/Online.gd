@@ -29,13 +29,11 @@ var nakama_socket: NakamaSocket
 # Internal variable for initializing the socket.
 var _nakama_socket_connecting: bool = false
 var _is_connected: bool = false
-var _session_failed_count: int = 0
 var _client_host: String = ""
 
 signal session_changed (nakama_session)
 signal session_connected (nakama_session)
 signal socket_connected (nakama_socket)
-signal connection_failed (error_message: String)
 signal disconnected ()
 
 

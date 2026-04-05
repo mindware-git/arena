@@ -8,7 +8,7 @@ extends Object
 enum NetworkEnv { LOCAL, SERVER }
 
 # 이 값을 변경하여 전체 테스트 환경을 전환할 수 있습니다.
-const CURRENT_ENV := NetworkEnv.LOCAL
+const CURRENT_ENV := NetworkEnv.SERVER
 
 const SERVER_KEY := "defaultkey"
 const PORT := 7350
