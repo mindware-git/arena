@@ -30,6 +30,7 @@ var nakama_socket: NakamaSocket
 var _nakama_socket_connecting: bool = false
 var _is_connected: bool = false
 var _session_failed_count: int = 0
+var _client_host: String = ""
 
 signal session_changed (nakama_session)
 signal session_connected (nakama_session)
@@ -48,7 +49,7 @@ func _ready() -> void:
 
 
 func get_nakama_client() -> NakamaClient:
-	if nakama_client == null:
+	if nakama_client == null or _client_host != nakama_host:
 		nakama_client = Nakama.create_client(
 			nakama_server_key,
 			nakama_host,
@@ -56,6 +57,7 @@ func get_nakama_client() -> NakamaClient:
 			nakama_scheme,
 			Nakama.DEFAULT_TIMEOUT,
 			NakamaLogger.LOG_LEVEL.ERROR)
+		_client_host = nakama_host
 
 	return nakama_client
 

@@ -74,7 +74,7 @@ class Player:
 		username = _username
 		peer_id = _peer_id
 
-	static func from_presence(presence: NakamaRTAPI.UserPresence, _peer_id: int) -> Player:
+	static func from_presence(presence: Variant, _peer_id: int) -> Player:
 		return Player.new(presence.session_id, presence.username, _peer_id)
 
 	static func from_dict(data: Dictionary) -> Player:

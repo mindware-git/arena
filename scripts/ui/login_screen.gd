@@ -13,6 +13,7 @@ var _status_label: Label
 var _is_authenticating: bool = false
 var _retry_count: int = 0
 var _max_retries: int = 3
+var _animation_time: float = 0.0
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Lifecycle
@@ -33,6 +34,7 @@ func _create_ui() -> void:
 	
 	# 타이틀
 	var title := Label.new()
+	title.name = "Label"
 	title.text = "ARENA"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -45,6 +47,7 @@ func _create_ui() -> void:
 	
 	# 로딩 상태 메시지
 	_status_label = Label.new()
+	_status_label.name = "Label2"
 	_status_label.text = "연결 중..."
 	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status_label.set_anchors_preset(Control.PRESET_CENTER)
@@ -56,6 +59,7 @@ func _create_ui() -> void:
 	
 	# 로딩 스피너 (간단한 점 애니메이션)
 	_loading_label = Label.new()
+	_loading_label.name = "Label3"
 	_loading_label.text = "●"
 	_loading_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_loading_label.set_anchors_preset(Control.PRESET_CENTER)
@@ -69,8 +73,9 @@ func _create_ui() -> void:
 func _process(delta: float) -> void:
 	if _is_authenticating:
 		# 간단한 로딩 애니메이션
+		_animation_time += delta
 		var dots := ["●", "●●", "●●●"]
-		var frame := int((Time.get_ticks_msec() / 500) % 3)
+		var frame := int(_animation_time / 0.5) % 3
 		_loading_label.text = dots[frame]
 
 

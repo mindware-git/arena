@@ -47,6 +47,7 @@ func _create_ui() -> void:
 	
 	# 타이틀
 	var title := Label.new()
+	title.name = "Label"
 	title.text = "매칭 중..."
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.position = Vector2(0, 100)
@@ -57,6 +58,7 @@ func _create_ui() -> void:
 	
 	# 경과 시간
 	_time_label = Label.new()
+	_time_label.name = "Label2"
 	_time_label.text = "00:00"
 	_time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_time_label.position = Vector2(0, 200)
@@ -67,6 +69,7 @@ func _create_ui() -> void:
 	
 	# 상태 메시지
 	_status_label = Label.new()
+	_status_label.name = "Label3"
 	_status_label.text = "플레이어 찾는 중..."
 	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status_label.position = Vector2(0, 320)
@@ -80,6 +83,7 @@ func _create_ui() -> void:
 	
 	# 취소 버튼
 	_cancel_btn = Button.new()
+	_cancel_btn.name = "Button"
 	_cancel_btn.text = "취소"
 	_cancel_btn.position = Vector2(540, 600)
 	_cancel_btn.size = Vector2(200, 50)
@@ -90,6 +94,7 @@ func _create_ui() -> void:
 func _create_player_slots() -> void:
 	# 슬롯 컨테이너
 	var slots := HBoxContainer.new()
+	slots.name = "HBoxContainer"
 	slots.position = Vector2(340, 400)
 	slots.size = Vector2(600, 120)
 	slots.alignment = BoxContainer.ALIGNMENT_CENTER

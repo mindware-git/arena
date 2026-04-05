@@ -26,6 +26,7 @@ func _create_ui() -> void:
 	
 	# 로고/타이틀
 	var title := Label.new()
+	title.name = "Label"
 	title.text = "ARENA"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -49,6 +50,7 @@ func _create_ui() -> void:
 	
 	# 시작 버튼
 	var start_btn := Button.new()
+	start_btn.name = "Button"
 	start_btn.text = "TOUCH TO START"
 	start_btn.set_anchors_preset(Control.PRESET_CENTER)
 	start_btn.position = Vector2(-80, 150)

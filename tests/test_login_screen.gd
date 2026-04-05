@@ -39,7 +39,7 @@ func test_initial_ui_setup() -> void:
 	
 	# 초기 상태 확인
 	var status_label = _login_screen.get_node("Label2")
-	assert_eq(status_label.text, "연결 중...", "Should show connecting status initially")
+	assert_eq(status_label.text, "Nakama 서버 연결 중...", "Should show connecting status initially")
 
 
 func test_authentication_retry_logic() -> void:
@@ -57,7 +57,7 @@ func test_error_display() -> void:
 	var loading_label = _login_screen.get_node("Label3")
 	
 	# 에러 표시 전 초기 상태
-	assert_eq(status_label.text, "연결 중...", "Should start with connecting")
+	assert_eq(status_label.text, "Nakama 서버 연결 중...", "Should start with connecting")
 	
 	# 에러 표시 (직접 호출)
 	_login_screen._show_error("Test error message")
@@ -96,6 +96,10 @@ func test_loading_animation() -> void:
 	
 	# 초기 상태
 	assert_eq(loading_label.text, "●", "Should start with single dot")
+	
+	# 애니메이션 활성화
+	_login_screen._is_authenticating = true
+	_login_screen._animation_time = 0.0
 	
 	# _process 시뮬레이션 (직접 호출)
 	_login_screen._process(0.5)  # 0.5초 경과

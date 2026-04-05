@@ -64,7 +64,7 @@ func test_login_error_handling() -> void:
 	
 	# 초기 상태 확인
 	var status_label = login.get_node("Label2")
-	assert_eq(status_label.text, "연결 중...", "Should show connecting status")
+	assert_eq(status_label.text, "Nakama 서버 연결 중...", "Should show connecting status")
 	
 	# 에러 시뮬레이션
 	login._show_error("Connection failed")
@@ -165,7 +165,7 @@ func test_online_connection_states() -> void:
 	assert_eq(status, "not_authenticated", "Should start not authenticated")
 	
 	# 세션 설정 후
-	var mock_session = NakamaSession.new("test_token", true, "test_refresh")
+	var mock_session = NakamaSession.new("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c", true, "test_refresh")
 	Online.set_nakama_session(mock_session)
 	
 	status = Online.get_connection_status()

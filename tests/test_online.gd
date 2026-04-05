@@ -13,12 +13,16 @@ func before_each() -> void:
 	_original_host = Online.nakama_host
 	_original_port = Online.nakama_port
 	_original_scheme = Online.nakama_scheme
+	
+	# Set test host for client creation
+	Online.nakama_host = "test.invalid"
 
 
 func after_each() -> void:
 	Online.nakama_host = _original_host
 	Online.nakama_port = _original_port
 	Online.nakama_scheme = _original_scheme
+	Online.set_nakama_session(null)
 
 
 func test_get_nakama_client() -> void:
@@ -36,7 +40,7 @@ func test_connection_status_not_authenticated() -> void:
 
 func test_connection_status_socket_disconnected() -> void:
 	# 세션은 있지만 소켓 없는 상태
-	var mock_session = NakamaSession.new("test_token", true, "test_refresh")
+	var mock_session = NakamaSession.new("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c", true, "test_refresh")
 	Online.set_nakama_session(mock_session)
 	
 	var status = Online.get_connection_status()
@@ -45,7 +49,7 @@ func test_connection_status_socket_disconnected() -> void:
 
 func test_connection_status_connected() -> void:
 	# 세션 있고 소켓 연결된 상태 (모킹)
-	var mock_session = NakamaSession.new("test_token", true, "test_refresh")
+	var mock_session = NakamaSession.new("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c", true, "test_refresh")
 	Online.set_nakama_session(mock_session)
 	
 	# 실제로는 연결할 수 없으니 상태만 체크
@@ -62,7 +66,7 @@ func test_session_signals() -> void:
 	
 	Online.connect("session_connected", Callable(self, "_on_session_connected"))
 	
-	var mock_session = NakamaSession.new("test_token", true, "test_refresh")
+	var mock_session = NakamaSession.new("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c", true, "test_refresh")
 	Online.set_nakama_session(mock_session)
 	
 	assert_true(signal_received, "session_connected signal should be emitted")
