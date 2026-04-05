@@ -87,7 +87,7 @@ func test_max_retries_exceeded() -> void:
 	assert_true(_transition_received, "Should emit transition_requested after max retries")
 
 
-func _on_transition_requested(screen) -> void:
+func _on_transition_requested(_screen) -> void:
 	_transition_received = true
 
 

@@ -275,6 +275,9 @@ func _check_client_version(host_client_version: String) -> void:
 
 
 func _on_network_peer_connected(peer_id: int) -> void:
+	if not nakama_multiplayer_bridge:
+		return
+
 	if is_multiplayer_authority():
 		if match_state == MatchState.PLAYING:
 			rpc_id(peer_id, "_boot_with_error", 'Sorry! The match has already begun.')
@@ -288,6 +291,8 @@ func _on_network_peer_connected(peer_id: int) -> void:
 		rpc_id(peer_id, "_check_client_version", client_version)
 
 	var presence: NakamaRTAPI.UserPresence = nakama_multiplayer_bridge.get_user_presence_for_peer(peer_id)
+	if presence == null:
+		return
 	var player = Player.from_presence(presence, peer_id)
 	players[peer_id] = player
 	emit_signal("player_joined", player)

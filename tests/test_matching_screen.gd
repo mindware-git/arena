@@ -143,7 +143,7 @@ func test_cancel_button() -> void:
 	assert_true(_cancel_signal_received, "Cancel should trigger transition")
 
 
-func _on_cancel_transition(screen) -> void:
+func _on_cancel_transition(_screen) -> void:
 	_cancel_signal_received = true
 
 

@@ -304,7 +304,7 @@ func test_permission_owner_write() -> void:
 	# ═══════════════════════════════════════════════════════════════════════════
 	var hack_data := JSON.stringify({"cards": ["hacked_card"]})
 	
-	var hack_result = await _client_b.write_storage_objects_async(_session_b, [
+	var _hack_result = await _client_b.write_storage_objects_async(_session_b, [
 		NakamaWriteStorageObject.new("cards", "private_deck", 1, 1, hack_data, "*")
 	])
 	

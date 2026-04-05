@@ -84,24 +84,32 @@ func _process(delta: float) -> void:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 func _start_authentication() -> void:
+	print("DEBUG: Starting authentication")
 	_is_authenticating = true
 	_status_label.text = "Nakama 서버 연결 중..."
 	
 	# Online 싱글톤으로 인증 시작
 	var device_id := OS.get_unique_id()
+	print("DEBUG: Device ID: ", device_id)
 	var client := Online.get_nakama_client()
+	print("DEBUG: Got Nakama client")
 	
 	# 디바이스 인증 (비동기)
+	print("DEBUG: Calling authenticate_device_async")
 	var result = await client.authenticate_device_async(device_id)
+	print("DEBUG: Authentication result received")
 	
 	if result.is_exception():
+		print("DEBUG: Authentication failed - ", result.get_exception().message)
 		_show_error("인증 실패: " + result.get_exception().message)
 		return
 	
 	# 세션 설정
+	print("DEBUG: Authentication successful, setting session")
 	Online.set_nakama_session(result)
 	
 	_status_label.text = "인증 완료!"
+	print("DEBUG: Transitioning to lobby")
 	await get_tree().create_timer(0.5).timeout
 	_is_authenticating = false
 	
@@ -111,6 +119,7 @@ func _start_authentication() -> void:
 
 
 func _show_error(message: String) -> void:
+	print("DEBUG: Showing error - ", message, " (retry count: ", _retry_count, ")")
 	_is_authenticating = false
 	_retry_count += 1
 	_status_label.text = message
@@ -119,6 +128,7 @@ func _show_error(message: String) -> void:
 	
 	# 재시도 횟수 초과 시 메뉴로
 	if _retry_count >= _max_retries:
+		print("DEBUG: Max retries reached, going back to menu")
 		await get_tree().create_timer(2.0).timeout
 		_status_label.text = "최대 재시도 횟수 초과"
 		_loading_label.text = "메뉴로 돌아갑니다"
@@ -128,6 +138,7 @@ func _show_error(message: String) -> void:
 		return
 	
 	# 2초 후 재시도
+	print("DEBUG: Retrying authentication in 2 seconds")
 	await get_tree().create_timer(2.0).timeout
 	_status_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
 	_start_authentication()
