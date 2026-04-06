@@ -10,6 +10,7 @@ var _timeout_called: bool = false
 var _cancel_signal_received: bool = false
 var _original_host: String
 var _original_port: int
+var _transition_screen: Control = null
 
 func before_each() -> void:
 	_original_host = Online.nakama_host
@@ -32,7 +33,12 @@ func after_each() -> void:
 	Online.nakama_port = _original_port
 	Online.set_nakama_session(null)
 	
-	if _matching_screen:
+	# Free transition screen first
+	if _transition_screen and is_instance_valid(_transition_screen):
+		_transition_screen.queue_free()
+		_transition_screen = null
+	
+	if _matching_screen and is_instance_valid(_matching_screen):
 		_matching_screen.queue_free()
 		_matching_screen = null
 
@@ -143,8 +149,12 @@ func test_cancel_button() -> void:
 	assert_true(_cancel_signal_received, "Cancel should trigger transition")
 
 
-func _on_cancel_transition(_screen) -> void:
+func _on_cancel_transition(screen) -> void:
 	_cancel_signal_received = true
+	# Store and free previous screen
+	if _transition_screen and is_instance_valid(_transition_screen):
+		_transition_screen.queue_free()
+	_transition_screen = screen
 
 
 func test_ui_full_rect_preset() -> void:

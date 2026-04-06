@@ -118,7 +118,7 @@ func _set_nakama_socket(_nakama_socket: NakamaSocket) -> void:
 		nakama_multiplayer_bridge.disconnect("match_join_error", Callable(self, "_on_match_join_error"))
 		nakama_multiplayer_bridge.leave()
 		nakama_multiplayer_bridge = null
-		get_tree().network_peer = null
+		multiplayer.multiplayer_peer = null
 
 	nakama_socket = _nakama_socket
 
@@ -127,7 +127,7 @@ func _set_nakama_socket(_nakama_socket: NakamaSocket) -> void:
 		nakama_multiplayer_bridge = NakamaMultiplayerBridge.new(nakama_socket)
 		nakama_multiplayer_bridge.connect("match_joined", Callable(self, "_on_match_joined"))
 		nakama_multiplayer_bridge.connect("match_join_error", Callable(self, "_on_match_join_error"))
-		get_tree().network_peer = nakama_multiplayer_bridge.multiplayer_peer
+		multiplayer.multiplayer_peer = nakama_multiplayer_bridge.multiplayer_peer
 
 
 func _ready() -> void:
@@ -254,7 +254,7 @@ func _check_enough_players() -> void:
 
 
 func _on_match_joined() -> void:
-	var my_peer_id: int = get_tree().get_network_unique_id()
+	var my_peer_id: int = multiplayer.get_unique_id()
 	var presence: NakamaRTAPI.UserPresence = nakama_multiplayer_bridge.get_user_presence_for_peer(my_peer_id)
 	var player = Player.from_presence(presence, my_peer_id)
 	players[my_peer_id] = player

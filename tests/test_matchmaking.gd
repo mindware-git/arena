@@ -5,9 +5,9 @@ extends GutTest
 # 자동 매치메이킹 테스트 - 두 플레이어가 매칭되는 과정 검증
 # ═══════════════════════════════════════════════════════════════════════════════
 
-var SERVER_KEY := NetworkConfig.SERVER_KEY
-var HOST := NetworkConfig.get_host()
-var PORT := NetworkConfig.PORT
+var SERVER_KEY: String = ProjectSettings.get_setting("network/nakama/server_key", "defaultkey")
+var HOST: String = ProjectSettings.get_setting("network/nakama/host", "localhost")
+var PORT: int = ProjectSettings.get_setting("network/nakama/port", 7350)
 const TIMEOUT := 30.0
 
 # Player A

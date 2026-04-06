@@ -57,6 +57,12 @@ attack_ranged={
 pointing/emulate_touch_from_mouse=true
 pointing/emulate_mouse_from_touch=false
 
+[network]
+
+nakama/host="127.0.0.1"
+nakama/server_key="defaultkey"
+nakama/port=7350
+
 [physics]
 
 3d/physics_engine="Jolt Physics"

@@ -38,6 +38,10 @@ var owner_character: Character:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 func _ready() -> void:
+	# 충돌 설정 (레이어 1: 캐릭터 감지)
+	collision_mask = 1
+	monitoring = true
+	
 	# 충돌 감지 시그널 연결
 	body_entered.connect(_on_body_entered)
 	area_entered.connect(_on_area_entered)

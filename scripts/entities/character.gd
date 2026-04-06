@@ -23,6 +23,10 @@ var _current_mp: int = 0
 var _current_bp: int = 0
 
 var _is_dead: bool = false
+var _is_controllable: bool = false  # 플레이어만 true, 적은 false
+
+# HP 바
+var _hp_bar: ProgressBar = null
 
 # 부스터
 var _is_boosting: bool = false
@@ -59,6 +63,10 @@ var current_bp: int:
 var is_dead: bool:
 	get: return _is_dead
 
+var is_controllable: bool:
+	get: return _is_controllable
+	set(value): _is_controllable = value
+
 var is_boosting: bool:
 	get: return _is_boosting
 
@@ -81,8 +89,25 @@ func init(data: CharacterData) -> void:
 	_current_bp = data.max_bp
 	_is_dead = false
 	
+	# 충돌 레이어 설정 (레이어 1: 캐릭터)
+	collision_layer = 1
+	
+	# 충돌 영역 설정
+	_setup_collision()
+	
 	# 시각적 표시를 위한 임시 설정
 	_setup_visual()
+	_setup_hp_bar()
+
+
+func _setup_collision() -> void:
+	# 캐릭터 충돌 영역 (캡슐 모양)
+	var collision := CollisionShape2D.new()
+	var shape := CapsuleShape2D.new()
+	shape.radius = 20.0
+	shape.height = 50.0
+	collision.shape = shape
+	add_child(collision)
 
 
 func _setup_visual() -> void:
@@ -114,6 +139,29 @@ func _get_element_color() -> Color:
 		_:
 			return Color.GRAY
 
+
+func _setup_hp_bar() -> void:
+	# HP 바 생성 (캐릭터 상단)
+	_hp_bar = ProgressBar.new()
+	_hp_bar.custom_minimum_size = Vector2(40, 6)
+	_hp_bar.position = Vector2(-20, -60)
+	_hp_bar.max_value = _data.max_hp
+	_hp_bar.value = _current_hp
+	_hp_bar.show_percentage = false
+	
+	# 스타일 설정
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.2, 0.8, 0.2)  # 초록색
+	style.set_corner_radius_all(2)
+	_hp_bar.add_theme_stylebox_override("fill", style)
+	
+	var bg_style := StyleBoxFlat.new()
+	bg_style.bg_color = Color(0.2, 0.2, 0.2, 0.8)
+	bg_style.set_corner_radius_all(2)
+	_hp_bar.add_theme_stylebox_override("background", bg_style)
+	
+	add_child(_hp_bar)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Movement
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -126,9 +174,12 @@ func _physics_process(delta: float) -> void:
 	_regen_mp(delta)
 	_handle_booster(delta)
 	_handle_melee_hitbox(delta)
-	_move(delta)
-	_handle_input()
-	move_and_slide()
+	
+	# 플레이어만 입력 처리
+	if _is_controllable:
+		_move(delta)
+		_handle_input()
+		move_and_slide()
 
 
 func _move(delta: float) -> void:
@@ -185,9 +236,26 @@ func take_damage(amount: int) -> void:
 	
 	_current_hp = maxi(0, _current_hp - amount)
 	hp_changed.emit(_current_hp, _data.max_hp)
+	_update_hp_bar()
 	
 	if _current_hp <= 0:
 		_die()
+
+
+func _update_hp_bar() -> void:
+	if _hp_bar:
+		_hp_bar.value = _current_hp
+		
+		# HP 비율에 따른 색상 변경
+		var ratio := float(_current_hp) / float(_data.max_hp)
+		var style: StyleBoxFlat = _hp_bar.get_theme_stylebox("fill")
+		if style:
+			if ratio > 0.5:
+				style.bg_color = Color(0.2, 0.8, 0.2)  # 초록
+			elif ratio > 0.25:
+				style.bg_color = Color(0.9, 0.8, 0.2)  # 노랑
+			else:
+				style.bg_color = Color(0.9, 0.2, 0.2)  # 빨강
 
 
 func heal(amount: int) -> void:
@@ -308,6 +376,7 @@ func _activate_melee_hitbox() -> void:
 	# 히트박스가 없으면 생성
 	if not _melee_hitbox:
 		_melee_hitbox = Area2D.new()
+		_melee_hitbox.collision_mask = 1  # 레이어 1 (캐릭터) 감지
 		
 		# 충돌 모양 (캐릭터 앞쪽 원형)
 		var collision := CollisionShape2D.new()

@@ -8,24 +8,23 @@ extends GutTest
 var _main_scene: Node2D
 var _current_screen: Control
 
+
 func before_each() -> void:
 	# Main 씬 시뮬레이션
 	_main_scene = Node2D.new()
 	add_child(_main_scene)
-	
-	# 테스트용 서버 설정 (실제 연결 방지)
-	Online.nakama_host = "test.invalid"
-	Online.nakama_port = 9999
 
 
 func after_each() -> void:
-	if _main_scene:
-		_main_scene.queue_free()
-		_main_scene = null
-	
-	if _current_screen:
+	# Cleanup screens first
+	if _current_screen and is_instance_valid(_current_screen):
 		_current_screen.queue_free()
 		_current_screen = null
+	
+	# Then cleanup main scene
+	if _main_scene and is_instance_valid(_main_scene):
+		_main_scene.queue_free()
+		_main_scene = null
 
 
 func test_splash_to_login_flow() -> void:
@@ -157,22 +156,11 @@ func test_matching_cancel_flow() -> void:
 	assert_true(transition_received, "Should emit transition_requested signal")
 	assert_not_null(next_screen, "Should provide next screen")
 	assert_true(next_screen is LobbyScreen, "Next screen should be LobbyScreen")
-
-
-func test_online_connection_states() -> void:
-	# 초기 상태
-	var status = Online.get_connection_status()
-	assert_eq(status, "not_authenticated", "Should start not authenticated")
 	
-	# 세션 설정 후
-	var mock_session = NakamaSession.new("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c", true, "test_refresh")
-	Online.set_nakama_session(mock_session)
-	
-	status = Online.get_connection_status()
-	assert_eq(status, "socket_disconnected", "Should be socket disconnected with session")
-	
-	# 소켓 연결 시뮬레이션 (실제로는 불가능하니 상태만 확인)
-	assert_false(Online.is_nakama_socket_connected(), "Should not be connected in test")
+	# Clean up the lobby screen
+	if next_screen and is_instance_valid(next_screen):
+		next_screen.queue_free()
+		next_screen = null
 
 
 func test_online_match_state_transitions() -> void:
@@ -191,4 +179,7 @@ var next_screen = null
 
 func _on_screen_transition(screen) -> void:
 	transition_received = true
+	# Free previous screen if exists
+	if next_screen and is_instance_valid(next_screen):
+		next_screen.queue_free()
 	next_screen = screen

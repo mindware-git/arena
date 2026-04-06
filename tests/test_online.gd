@@ -3,26 +3,37 @@ extends GutTest
 # ═══════════════════════════════════════════════════════════════════════════════
 # Test: Online.gd - Nakama Connection Management
 # Online 싱글톤의 연결 관리 기능 테스트
+# 실제 Nakama 서버를 사용하여 테스트
 # ═══════════════════════════════════════════════════════════════════════════════
 
-var _original_host: String
-var _original_port: int
-var _original_scheme: String
+var SERVER_KEY: String = ProjectSettings.get_setting("network/nakama/server_key", "defaultkey")
+var HOST: String = ProjectSettings.get_setting("network/nakama/host", "localhost")
+var PORT: int = ProjectSettings.get_setting("network/nakama/port", 7350)
+
+var _http_adapter: NakamaHTTPAdapter
+var _client: NakamaClient
+var _session: NakamaSession
+
 
 func before_each() -> void:
-	_original_host = Online.nakama_host
-	_original_port = Online.nakama_port
-	_original_scheme = Online.nakama_scheme
+	# Reset Online singleton state
+	Online.set_nakama_session(null)
 	
-	# Set test host for client creation
-	Online.nakama_host = "test.invalid"
+	# Create HTTP adapter and client
+	_http_adapter = NakamaHTTPAdapter.new()
+	add_child(_http_adapter)
+	_client = NakamaClient.new(_http_adapter, SERVER_KEY, "http", HOST, PORT, 10)
 
 
 func after_each() -> void:
-	Online.nakama_host = _original_host
-	Online.nakama_port = _original_port
-	Online.nakama_scheme = _original_scheme
+	# Cleanup
 	Online.set_nakama_session(null)
+	
+	if _http_adapter and is_instance_valid(_http_adapter):
+		_http_adapter.queue_free()
+		_http_adapter = null
+	_client = null
+	_session = null
 
 
 func test_get_nakama_client() -> void:
@@ -39,40 +50,43 @@ func test_connection_status_not_authenticated() -> void:
 
 
 func test_connection_status_socket_disconnected() -> void:
-	# 세션은 있지만 소켓 없는 상태
-	var mock_session = NakamaSession.new("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c", true, "test_refresh")
-	Online.set_nakama_session(mock_session)
+	# 실제 서버에 연결해서 세션 생성
+	var session_result = await _client.authenticate_device_async("test_online_device")
+	
+	if session_result.is_exception():
+		pending("Could not authenticate: %s" % session_result.get_exception().message)
+		return
+	
+	_session = session_result
+	Online.set_nakama_session(_session)
 	
 	var status = Online.get_connection_status()
 	assert_eq(status, "socket_disconnected", "Should return socket_disconnected when session exists but no socket")
 
 
-func test_connection_status_connected() -> void:
-	# 세션 있고 소켓 연결된 상태 (모킹)
-	var mock_session = NakamaSession.new("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c", true, "test_refresh")
-	Online.set_nakama_session(mock_session)
-	
-	# 실제로는 연결할 수 없으니 상태만 체크
-	var status = Online.get_connection_status()
-	assert_eq(status, "socket_disconnected", "Should return socket_disconnected (no real connection in test)")
-
-
-var signal_received: bool = false
-var received_session = null
+var _signal_received: bool = false
+var _received_session: NakamaSession = null
 
 func test_session_signals() -> void:
-	signal_received = false
-	received_session = null
+	_signal_received = false
+	_received_session = null
 	
 	Online.connect("session_connected", Callable(self, "_on_session_connected"))
 	
-	var mock_session = NakamaSession.new("eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c", true, "test_refresh")
-	Online.set_nakama_session(mock_session)
+	# 실제 서버에 연결해서 세션 생성
+	var session_result = await _client.authenticate_device_async("test_online_device_signals")
 	
-	assert_true(signal_received, "session_connected signal should be emitted")
-	assert_not_null(received_session, "Session should be passed in signal")
+	if session_result.is_exception():
+		pending("Could not authenticate: %s" % session_result.get_exception().message)
+		return
+	
+	_session = session_result
+	Online.set_nakama_session(_session)
+	
+	assert_true(_signal_received, "session_connected signal should be emitted")
+	assert_not_null(_received_session, "Session should be passed in signal")
 
 
-func _on_session_connected(session) -> void:
-	signal_received = true
-	received_session = session
+func _on_session_connected(session: NakamaSession) -> void:
+	_signal_received = true
+	_received_session = session

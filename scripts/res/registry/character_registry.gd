@@ -15,6 +15,7 @@ func _init() -> void:
 func _register_all_characters() -> void:
 	_register_gyro()
 	_register_shamu()
+	_register_enemy_slime()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -89,6 +90,31 @@ func get_all_ids() -> Array[String]:
 	for key in _characters.keys():
 		result.append(key)
 	return result
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 적 캐릭터 (Enemy Slime)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+func _register_enemy_slime() -> void:
+	var data := CharacterData.new()
+	data.id = "enemy_slime"
+	data.display_name = "슬라임"
+	data.description = "기본 적"
+	data.element = GameManager.ElementType.EARTH
+	
+	# 능력치 (약한 적)
+	data.max_hp = 30
+	data.max_mp = 0
+	data.max_bp = 0
+	data.melee_power = 5
+	data.ranged_power = 0
+	data.max_speed = 80.0
+	data.rotation_speed = 3.0
+	data.acceleration = 5.0
+	data.is_flying = false
+	
+	_characters[data.id] = data
 
 
 func has_character(id: String) -> bool:

@@ -9,6 +9,7 @@ var _login_screen: LoginScreen
 var _original_host: String
 var _original_port: int
 var _transition_received: bool = false
+var _transition_screen: Control = null
 
 func before_each() -> void:
 	_original_host = Online.nakama_host
@@ -26,7 +27,12 @@ func after_each() -> void:
 	Online.nakama_host = _original_host
 	Online.nakama_port = _original_port
 	
-	if _login_screen:
+	# Free transition screen first
+	if _transition_screen and is_instance_valid(_transition_screen):
+		_transition_screen.queue_free()
+		_transition_screen = null
+	
+	if _login_screen and is_instance_valid(_login_screen):
 		_login_screen.queue_free()
 		_login_screen = null
 
@@ -87,8 +93,12 @@ func test_max_retries_exceeded() -> void:
 	assert_true(_transition_received, "Should emit transition_requested after max retries")
 
 
-func _on_transition_requested(_screen) -> void:
+func _on_transition_requested(screen) -> void:
 	_transition_received = true
+	# Store and free previous screen
+	if _transition_screen and is_instance_valid(_transition_screen):
+		_transition_screen.queue_free()
+	_transition_screen = screen
 
 
 func test_loading_animation() -> void:

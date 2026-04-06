@@ -5,9 +5,9 @@ extends GutTest
 # 유저 데이터 저장/읽기 + 권한 + Progression Template 패턴
 # ═══════════════════════════════════════════════════════════════════════════════
 
-var SERVER_KEY := NetworkConfig.SERVER_KEY
-var HOST := NetworkConfig.get_host()
-var PORT := NetworkConfig.PORT
+var SERVER_KEY: String = ProjectSettings.get_setting("network/nakama/server_key", "defaultkey")
+var HOST: String = ProjectSettings.get_setting("network/nakama/host", "localhost")
+var PORT: int = ProjectSettings.get_setting("network/nakama/port", 7350)
 const TIMEOUT := 10.0
 
 # Player A

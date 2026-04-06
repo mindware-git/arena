@@ -13,12 +13,10 @@ extends Node
 #   3. GameManager: 게임 루프/상태 머신
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# For developers to set from the outside, for example:
-#   Online.nakama_host = 'nakama.example.com'
-#   Online.nakama_scheme = 'https'
-var nakama_server_key: String = 'defaultkey'
-var nakama_host: String = 'localhost'
-var nakama_port: int = 7350
+# Network configuration from ProjectSettings
+var nakama_server_key: String
+var nakama_host: String
+var nakama_port: int
 var nakama_scheme: String = 'http'
 
 # For other scripts to access:
@@ -42,6 +40,11 @@ func _set_readonly_variable(_value) -> void:
 
 
 func _ready() -> void:
+	# Load network configuration from ProjectSettings
+	nakama_host = ProjectSettings.get_setting("network/nakama/host", "localhost")
+	nakama_server_key = ProjectSettings.get_setting("network/nakama/server_key", "defaultkey")
+	nakama_port = ProjectSettings.get_setting("network/nakama/port", 7350)
+	
 	# Don't stop processing messages from Nakama when the game is paused.
 	Nakama.process_mode = Node.PROCESS_MODE_ALWAYS
 
