@@ -89,7 +89,8 @@ func _start_authentication() -> void:
 	_status_label.text = "Nakama 서버 연결 중..."
 	
 	# Online 싱글톤으로 인증 시작
-	var device_id := OS.get_unique_id()
+	# 디버깅용: 동일 PC에서 여러 인스턴스 실행을 위해 PID 추가
+	var device_id := OS.get_unique_id() + "_" + str(OS.get_process_id())
 	print("DEBUG: Device ID: ", device_id)
 	var client := Online.get_nakama_client()
 	print("DEBUG: Got Nakama client")

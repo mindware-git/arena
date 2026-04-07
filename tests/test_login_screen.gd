@@ -19,22 +19,16 @@ func before_each() -> void:
 	Online.nakama_host = "invalid.host"
 	Online.nakama_port = 9999
 	
-	_login_screen = LoginScreen.new()
-	add_child(_login_screen)
+	_login_screen = add_child_autofree(LoginScreen.new())
 
 
 func after_each() -> void:
 	Online.nakama_host = _original_host
 	Online.nakama_port = _original_port
 	
-	# Free transition screen first
-	if _transition_screen and is_instance_valid(_transition_screen):
-		_transition_screen.queue_free()
-		_transition_screen = null
-	
-	if _login_screen and is_instance_valid(_login_screen):
-		_login_screen.queue_free()
-		_login_screen = null
+	# autofree handles cleanup
+	_transition_screen = null
+	_login_screen = null
 
 
 func test_initial_ui_setup() -> void:

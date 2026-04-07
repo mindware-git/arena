@@ -18,6 +18,12 @@ var _matching_timeout: float = 30.0  # 30초 타임아웃
 var _retry_count: int = 0
 var _max_retries: int = 3
 
+# 플레이어 슬롯
+var _my_slot: PanelContainer
+var _opponent_slot: PanelContainer
+var _opponent_name_label: Label
+var _opponent_status_label: Label
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Lifecycle
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -101,9 +107,15 @@ func _create_player_slots() -> void:
 	slots.add_theme_constant_override("separation", 100)
 	add_child(slots)
 	
+	# 내 이름 가져오기
+	var my_name := "Player_001"
+	var my_peer_id = multiplayer.get_unique_id()
+	if OnlineMatch.players.has(my_peer_id):
+		my_name = OnlineMatch.players[my_peer_id].username
+	
 	# 플레이어 1 (나)
-	var slot1 := _create_slot("Player_001", true)
-	slots.add_child(slot1)
+	_my_slot = _create_slot(my_name, true)
+	slots.add_child(_my_slot)
 	
 	# VS
 	var vs := Label.new()
@@ -112,9 +124,14 @@ func _create_player_slots() -> void:
 	vs.add_theme_color_override("font_color", Color(0.9, 0.5, 0.2))
 	slots.add_child(vs)
 	
-	# 플레이어 2 (상대)
-	var slot2 := _create_slot("???", false)
-	slots.add_child(slot2)
+	# 플레이어 2 (상대) - 나중에 업데이트됨
+	_opponent_slot = _create_slot("???", false)
+	slots.add_child(_opponent_slot)
+	
+	# 상대방 이름/상태 라벨 저장 (업데이트용)
+	var content = _opponent_slot.get_child(0)
+	_opponent_name_label = content.get_child(1)  # 이름 라벨
+	_opponent_status_label = content.get_child(2)  # 상태 라벨
 
 
 func _create_slot(player_name: String, is_ready: bool) -> PanelContainer:
@@ -173,6 +190,19 @@ func _start_matching() -> void:
 
 
 func _on_match_ready(_players: Dictionary) -> void:
+	# 상대방 이름 업데이트
+	var my_peer_id = multiplayer.get_unique_id()
+	for peer_id in OnlineMatch.players:
+		if peer_id != my_peer_id:
+			var opponent = OnlineMatch.players[peer_id]
+			if _opponent_name_label and opponent.username:
+				_opponent_name_label.text = opponent.username
+			if _opponent_status_label:
+				_opponent_status_label.text = "준비됨"
+				_opponent_status_label.add_theme_color_override("font_color", Color(0.4, 0.8, 0.4))
+			print("MatchingScreen: Opponent joined: %s" % opponent.username)
+			break
+	
 	_on_match_found()
 
 

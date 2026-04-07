@@ -13,6 +13,16 @@ signal booster_changed(is_active: bool)
 signal attacked(is_ranged: bool)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Network Sync Constants
+# ═══════════════════════════════════════════════════════════════════════════════
+
+const SYNC_DELAY := 3  # 몇 프레임마다 동기화할지
+const POSITION_SYNC_OP_CODE := 9003  # 위치 동기화 op_code
+
+var _sync_counter: int = 0
+var _is_network_controlled: bool = false  # 원격 플레이어면 true
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Data
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -175,11 +185,18 @@ func _physics_process(delta: float) -> void:
 	_handle_booster(delta)
 	_handle_melee_hitbox(delta)
 	
-	# 플레이어만 입력 처리
-	if _is_controllable:
+	# 네트워크 동기화 처리
+	if _is_network_controlled:
+		# 원격 플레이어는 동기화된 위치로 이동
+		pass
+	elif _is_controllable:
+		# 로컬 플레이어만 입력 처리
 		_move(delta)
 		_handle_input()
 		move_and_slide()
+		
+		# 네트워크 동기화 전송
+		_sync_position_periodically()
 
 
 func _move(delta: float) -> void:
@@ -473,6 +490,46 @@ func can_attack_ranged() -> bool:
 	return not _is_dead and _ranged_cooldown_timer <= 0 and _current_bp >= _data.ranged_bp_cost
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Network Sync Methods
+# ═══════════════════════════════════════════════════════════════════════════════
+
+func set_network_controlled(is_network: bool) -> void:
+	_is_network_controlled = is_network
+	if is_network:
+		# 원격 플레이어는 입력 비활성화
+		_is_controllable = false
+
+
+func is_network_controlled() -> bool:
+	return _is_network_controlled
+
+
+func _sync_position_periodically() -> void:
+	# 온라인 플레이가 아니면 동기화하지 않음
+	if not OnlineMatch.nakama_socket or OnlineMatch.get_match_id().is_empty():
+		return
+	
+	_sync_counter += 1
+	if _sync_counter < SYNC_DELAY:
+		return
+	_sync_counter = 0
+	
+	# RPC로 위치 동기화 전송
+	rpc("sync_remote_position", position, velocity, _facing_direction, _current_hp)
+
+
+@rpc("any_peer", "unreliable")
+func sync_remote_position(_pos: Vector2, _vel: Vector2, _facing: Vector2, _hp: int) -> void:
+	# 원격 플레이어 위치 업데이트
+	if _is_network_controlled:
+		position = _pos
+		velocity = _vel
+		_facing_direction = _facing
+		_current_hp = _hp
+		_update_hp_bar()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Debug
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -481,10 +538,12 @@ func get_debug_info() -> String:
 		return "No data"
 	
 	var boost_status := "BOOST" if _is_boosting else ""
-	return "%s | HP: %d/%d | MP: %d/%d | BP: %d/%d | %s" % [
+	var network_status := "NET" if _is_network_controlled else "LOCAL"
+	return "%s | HP: %d/%d | MP: %d/%d | BP: %d/%d | %s | %s" % [
 		_data.display_name,
 		_current_hp, _data.max_hp,
 		_current_mp, _data.max_mp,
 		_current_bp, _data.max_bp,
-		boost_status
+		boost_status,
+		network_status
 	]

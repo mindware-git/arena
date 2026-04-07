@@ -11,20 +11,13 @@ var _current_screen: Control
 
 func before_each() -> void:
 	# Main 씬 시뮬레이션
-	_main_scene = Node2D.new()
-	add_child(_main_scene)
+	_main_scene = add_child_autofree(Node2D.new())
 
 
 func after_each() -> void:
-	# Cleanup screens first
-	if _current_screen and is_instance_valid(_current_screen):
-		_current_screen.queue_free()
-		_current_screen = null
-	
-	# Then cleanup main scene
-	if _main_scene and is_instance_valid(_main_scene):
-		_main_scene.queue_free()
-		_main_scene = null
+	# autofree handles cleanup
+	_current_screen = null
+	_main_scene = null
 
 
 func test_splash_to_login_flow() -> void:

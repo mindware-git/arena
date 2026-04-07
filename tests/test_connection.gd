@@ -62,7 +62,8 @@ func test_nakama_connection() -> void:
 	assert_not_null(_client, "NakamaClient should be created")
 	
 	# 2. 게스트 세션 생성 (비동기)
-	var session_result = await _client.authenticate_device_async(OS.get_unique_id())
+	# 디버깅용: 동일 PC에서 여러 인스턴스 실행을 위해 PID 추가
+	var session_result = await _client.authenticate_device_async(OS.get_unique_id() + "_" + str(OS.get_process_id()))
 	
 	if session_result.is_exception():
 		pending("Could not authenticate: %s" % session_result.get_exception().message)
@@ -93,7 +94,7 @@ func test_multiplayer_bridge() -> void:
 	
 	_client = NakamaClient.new(_http_adapter, SERVER_KEY, "http", HOST, PORT, 10)
 	
-	var session_result = await _client.authenticate_device_async(OS.get_unique_id())
+	var session_result = await _client.authenticate_device_async(OS.get_unique_id() + "_" + str(OS.get_process_id()))
 	
 	if session_result.is_exception():
 		pending("Could not authenticate: %s" % session_result.get_exception().message)

@@ -24,8 +24,7 @@ func before_each() -> void:
 	var mock_session = NakamaSession.new("test_token", true, "test_refresh")
 	Online.set_nakama_session(mock_session)
 	
-	_matching_screen = MatchingScreen.new()
-	add_child(_matching_screen)
+	_matching_screen = add_child_autofree(MatchingScreen.new())
 
 
 func after_each() -> void:
@@ -33,14 +32,9 @@ func after_each() -> void:
 	Online.nakama_port = _original_port
 	Online.set_nakama_session(null)
 	
-	# Free transition screen first
-	if _transition_screen and is_instance_valid(_transition_screen):
-		_transition_screen.queue_free()
-		_transition_screen = null
-	
-	if _matching_screen and is_instance_valid(_matching_screen):
-		_matching_screen.queue_free()
-		_matching_screen = null
+	# autofree handles cleanup
+	_transition_screen = null
+	_matching_screen = null
 
 
 func test_initial_ui_setup() -> void:

@@ -8,6 +8,8 @@ extends Control
 
 signal transition_requested(next_screen: Node)
 
+var _player_name_label: Label
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Lifecycle
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -15,6 +17,17 @@ signal transition_requested(next_screen: Node)
 func _ready() -> void:
 	anchors_preset = Control.PRESET_FULL_RECT
 	_create_ui()
+	_update_player_name()
+
+
+func _update_player_name() -> void:
+	# OnlineMatch에서 현재 플레이어 이름 가져오기
+	var my_peer_id = multiplayer.get_unique_id()
+	if OnlineMatch.players.has(my_peer_id):
+		var player = OnlineMatch.players[my_peer_id]
+		if _player_name_label and player.username:
+			_player_name_label.text = player.username
+			print("LobbyScreen: Player name set to %s" % player.username)
 
 
 func _create_ui() -> void:
@@ -46,10 +59,10 @@ func _create_header() -> void:
 	player_info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(player_info)
 	
-	var name_label := Label.new()
-	name_label.text = "Player_001"
-	name_label.add_theme_font_size_override("font_size", 18)
-	player_info.add_child(name_label)
+	_player_name_label = Label.new()
+	_player_name_label.text = "Player_001"
+	_player_name_label.add_theme_font_size_override("font_size", 18)
+	player_info.add_child(_player_name_label)
 	
 	var level_label := Label.new()
 	level_label.text = "Lv.1 | 0/100 XP"

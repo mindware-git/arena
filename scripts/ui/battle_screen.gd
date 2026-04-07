@@ -13,12 +13,16 @@ var _enemy: Character
 var _registry: CharacterRegistry
 var _game_time: float = 0.0
 var _is_game_over: bool = false
+var _is_multiplayer: bool = false  # 멀티플레이어 여부
+var _remote_players: Dictionary = {}  # peer_id -> Character
 
 var _time_label: Label
 var _player_hp_bar: ProgressBar
 var _player_mp_bar: ProgressBar
 var _player_bp_bar: ProgressBar
 var _enemy_hp_bar: ProgressBar
+var _player_name_label: Label
+var _enemy_name_label: Label
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Lifecycle
@@ -66,10 +70,10 @@ func _create_hud() -> void:
 	player_hud.size = Vector2(200, 130)
 	add_child(player_hud)
 	
-	var player_name := Label.new()
-	player_name.text = "Player_001"
-	player_name.add_theme_font_size_override("font_size", 14)
-	player_hud.add_child(player_name)
+	_player_name_label = Label.new()
+	_player_name_label.text = "Player_001"
+	_player_name_label.add_theme_font_size_override("font_size", 14)
+	player_hud.add_child(_player_name_label)
 	
 	# HP
 	var hp_box := HBoxContainer.new()
@@ -124,10 +128,10 @@ func _create_hud() -> void:
 	enemy_hud.size = Vector2(200, 80)
 	add_child(enemy_hud)
 	
-	var enemy_name := Label.new()
-	enemy_name.text = "Enemy_Bot"
-	enemy_name.add_theme_font_size_override("font_size", 14)
-	enemy_hud.add_child(enemy_name)
+	_enemy_name_label = Label.new()
+	_enemy_name_label.text = "Enemy_Bot"
+	_enemy_name_label.add_theme_font_size_override("font_size", 14)
+	enemy_hud.add_child(_enemy_name_label)
 	
 	_enemy_hp_bar = ProgressBar.new()
 	_enemy_hp_bar.custom_minimum_size = Vector2(200, 25)
@@ -147,11 +151,22 @@ func _create_hud() -> void:
 
 
 func _spawn_characters() -> void:
+	# 멀티플레이어 모드 확인
+	_is_multiplayer = OnlineMatch.nakama_socket != null and not OnlineMatch.get_match_id().is_empty()
+	
+	if _is_multiplayer:
+		_spawn_multiplayer_characters()
+	else:
+		_spawn_singleplayer_characters()
+
+
+func _spawn_singleplayer_characters() -> void:
 	# 플레이어 캐릭터
 	var player_data := _registry.get_character("gyro")
 	_player = Character.new()
 	_player.init(player_data)
 	_player.position = Vector2(300, 360)
+	_player.is_controllable = true  # 로컬 플레이어
 	_player.died.connect(_on_player_died)
 	_player.hp_changed.connect(_on_player_hp_changed)
 	_player.mp_changed.connect(_on_player_mp_changed)
@@ -171,6 +186,65 @@ func _spawn_characters() -> void:
 	
 	# 간단한 적 AI 시작
 	_setup_enemy_ai()
+
+
+func _spawn_multiplayer_characters() -> void:
+	# OnlineMatch.players에서 플레이어 정보 가져오기
+	var players = OnlineMatch.players
+	var my_peer_id = multiplayer.get_unique_id()
+	
+	print("Spawning multiplayer characters. My peer_id: %d, players: %s" % [my_peer_id, players.keys()])
+	
+	# 플레이어 스폰 위치
+	var spawn_positions = [
+		Vector2(300, 360),   # Player 1 (왼쪽)
+		Vector2(980, 360)    # Player 2 (오른쪽)
+	]
+	
+	var spawn_index = 0
+	for peer_id in players:
+		var player_info = players[peer_id]
+		var player_data: CharacterData
+		
+		# TODO: 캐릭터 선택 동기화 필요. 일단 기본 캐릭터 사용
+		if peer_id == my_peer_id:
+			player_data = _registry.get_character("gyro")
+		else:
+			player_data = _registry.get_character("shamu")
+		
+		var character := Character.new()
+		character.init(player_data)
+		character.position = spawn_positions[spawn_index]
+		character.name = "Player_%d" % peer_id
+		
+		# 멀티플레이어 권한 설정
+		character.set_multiplayer_authority(peer_id)
+		
+		if peer_id == my_peer_id:
+			# 로컬 플레이어
+			_player = character
+			character.is_controllable = true
+			character.died.connect(_on_player_died)
+			character.hp_changed.connect(_on_player_hp_changed)
+			character.mp_changed.connect(_on_player_mp_changed)
+			character.bp_changed.connect(_on_player_bp_changed)
+			# 이름 업데이트
+			if _player_name_label and player_info.username:
+				_player_name_label.text = player_info.username
+		else:
+			# 원격 플레이어
+			_remote_players[peer_id] = character
+			character.set_network_controlled(true)
+			_enemy = character  # 호환성을 위해 _enemy에도 할당
+			character.hp_changed.connect(_on_enemy_hp_changed)
+			# 이름 업데이트
+			if _enemy_name_label and player_info.username:
+				_enemy_name_label.text = player_info.username
+		
+		add_child(character)
+		spawn_index += 1
+	
+	print("Multiplayer characters spawned. Local: %s, Remote: %d" % [_player.name, _remote_players.size()])
 
 
 func _setup_enemy_ai() -> void:

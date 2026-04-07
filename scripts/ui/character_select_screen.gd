@@ -8,6 +8,23 @@ extends Control
 
 signal transition_requested(next_screen: Node)
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Network Sync
+# ═══════════════════════════════════════════════════════════════════════════════
+
+const CHAR_SELECT_OP_CODE := 9004  # 캐릭터 선택 동기화 op_code
+
+var _is_multiplayer: bool = false
+var _my_character_id: String = ""
+var _my_ready: bool = false
+var _opponent_character_id: String = ""
+var _opponent_ready: bool = false
+var _opponent_peer_id: int = 0
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# UI
+# ═══════════════════════════════════════════════════════════════════════════════
+
 var _registry: CharacterRegistry
 var _character_ids: Array[String] = []
 var _selected_index: int = 0
@@ -17,6 +34,8 @@ var _name_label: Label
 var _element_label: Label
 var _stats_label: Label
 var _description_label: Label
+var _status_label: Label  # 대기 상태 표시
+var _confirm_btn: Button
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Lifecycle
@@ -29,8 +48,10 @@ func _ready() -> void:
 	
 	if _character_ids.size() > 0:
 		_selected_character = _registry.get_character(_character_ids[0])
+		_my_character_id = _character_ids[0]
 	
 	_create_ui()
+	_setup_multiplayer()
 
 
 func _create_ui() -> void:
@@ -210,11 +231,132 @@ func _get_stats_text() -> String:
 
 
 func _on_back_pressed() -> void:
+	# 멀티플레이어에서 나가기
+	if _is_multiplayer:
+		OnlineMatch.leave()
 	var lobby := LobbyScreen.new()
 	transition_requested.emit(lobby)
 
 
 func _on_confirm_pressed() -> void:
-	# BattleScreen으로 전환
-	var battle := BattleScreen.new()
-	transition_requested.emit(battle)
+	# 캐릭터 선택 저장
+	_my_character_id = _character_ids[_selected_index]
+	_my_ready = true
+	
+	if _is_multiplayer:
+		# 멀티플레이어: 상대방에게 선택 전송
+		_send_character_selection()
+		_update_status_ui()
+		
+		# 양쪽 모두 준비되었는지 확인
+		_check_both_ready()
+	else:
+		# 싱글플레이어: 바로 전환
+		var battle := BattleScreen.new()
+		transition_requested.emit(battle)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Multiplayer Methods
+# ═══════════════════════════════════════════════════════════════════════════════
+
+func _setup_multiplayer() -> void:
+	# 멀티플레이어 모드 확인
+	_is_multiplayer = OnlineMatch.nakama_socket != null and not OnlineMatch.get_match_id().is_empty()
+	
+	if not _is_multiplayer:
+		return
+	
+	print("CharacterSelectScreen: Multiplayer mode enabled")
+	
+	# 상대방 peer_id 찾기
+	var my_peer_id = multiplayer.get_unique_id()
+	for peer_id in OnlineMatch.players:
+		if peer_id != my_peer_id:
+			_opponent_peer_id = peer_id
+			print("CharacterSelectScreen: Found opponent peer_id=%d" % peer_id)
+			break
+	
+	# 소켓에 캐릭터 선택 수신 리스너 등록
+	if OnlineMatch.nakama_socket:
+		OnlineMatch.nakama_socket.received_match_state.connect(_on_received_match_state)
+	
+	# 상태 UI 추가
+	_add_status_ui()
+
+
+func _add_status_ui() -> void:
+	# 상대방 대기 상태 표시
+	_status_label = Label.new()
+	_status_label.text = "상대 대기 중..."
+	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status_label.position = Vector2(0, 560)
+	_status_label.size = Vector2(1280, 30)
+	_status_label.add_theme_font_size_override("font_size", 16)
+	_status_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+	add_child(_status_label)
+
+
+func _update_status_ui() -> void:
+	if not _status_label:
+		return
+	
+	if _my_ready and _opponent_ready:
+		_status_label.text = "게임 시작 중..."
+		_status_label.add_theme_color_override("font_color", Color(0.4, 0.9, 0.4))
+	elif _my_ready:
+		_status_label.text = "상대 대기 중... (상대: %s)" % ("준비 완료" if _opponent_ready else "선택 중")
+		_status_label.add_theme_color_override("font_color", Color(0.9, 0.7, 0.2))
+	else:
+		_status_label.text = "상대 대기 중..."
+		_status_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+
+
+func _send_character_selection() -> void:
+	if not OnlineMatch.nakama_socket:
+		print("CharacterSelectScreen: Cannot send - no socket")
+		return
+	
+	if _opponent_peer_id == 0:
+		print("CharacterSelectScreen: No opponent found")
+		return
+	
+	# NakamaMultiplayerBridge에서 상대방 presence 가져오기
+	var opponent_presence = OnlineMatch.nakama_multiplayer_bridge.get_user_presence_for_peer(_opponent_peer_id)
+	if not opponent_presence:
+		print("CharacterSelectScreen: Cannot get opponent presence for peer_id=%d" % _opponent_peer_id)
+		return
+	
+	var data := {
+		"char_id": _my_character_id,
+		"ready": _my_ready
+	}
+	var select_data := PackedByteArray()
+	select_data.append_array(var_to_bytes(data))
+	
+	var match_id = OnlineMatch.get_match_id()
+	OnlineMatch.nakama_socket.send_match_state_raw_async(match_id, CHAR_SELECT_OP_CODE, select_data, [opponent_presence])
+	print("CharacterSelectScreen: Sent selection char_id=%s, ready=%s to peer_id=%d" % [_my_character_id, _my_ready, _opponent_peer_id])
+
+
+func _on_received_match_state(match_state: NakamaRTAPI.MatchData) -> void:
+	if match_state.op_code == CHAR_SELECT_OP_CODE:
+		var data = bytes_to_var(match_state.binary_data)
+		if data is Dictionary:
+			_opponent_character_id = data.get("char_id", "")
+			_opponent_ready = data.get("ready", false)
+			print("CharacterSelectScreen: Received opponent selection char_id=%s, ready=%s" % [_opponent_character_id, _opponent_ready])
+			
+			_update_status_ui()
+			_check_both_ready()
+
+
+func _check_both_ready() -> void:
+	if _my_ready and _opponent_ready:
+		print("CharacterSelectScreen: Both players ready, starting game...")
+		
+		# 짧은 대기 후 게임 시작
+		await get_tree().create_timer(0.5).timeout
+		
+		var battle := BattleScreen.new()
+		transition_requested.emit(battle)
