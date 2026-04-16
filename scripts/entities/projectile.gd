@@ -19,6 +19,7 @@ var _owner: Character = null
 var _distance_traveled: float = 0.0
 var _max_range: float = 500.0
 var _element: GameManager.ElementType = GameManager.ElementType.EARTH
+var _is_special: bool = false  # 필살기 투사체 여부
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Properties
@@ -57,7 +58,8 @@ func init(
 	p_damage: int,
 	p_owner: Character,
 	p_max_range: float,
-	p_element: GameManager.ElementType = GameManager.ElementType.EARTH
+	p_element: GameManager.ElementType = GameManager.ElementType.EARTH,
+	p_is_special: bool = false
 ) -> void:
 	_direction = p_direction.normalized()
 	_speed = p_speed
@@ -65,22 +67,24 @@ func init(
 	_owner = p_owner
 	_max_range = p_max_range
 	_element = p_element
+	_is_special = p_is_special
 
 
 func _setup_visual() -> void:
-	# 임시: 작은 원형 투사체
+	# 필살기 투사체는 더 크게 표시
+	var size := 24 if _is_special else 12
 	var sprite := ColorRect.new()
-	sprite.color = _get_element_color()
-	sprite.size = Vector2(12, 12)
-	sprite.position = Vector2(-6, -6)
+	sprite.color = _get_element_color() if not _is_special else Color(1.0, 0.8, 0.0)  # 필살기는 금색
+	sprite.size = Vector2(size, size)
+	sprite.position = Vector2(-size / 2.0, -size / 2.0)
 	add_child(sprite)
 
 
 func _setup_collision() -> void:
-	# 충돌 영역 설정
+	# 충돌 영역 설정 (필살기는 더 큰 충돌 영역)
 	var collision := CollisionShape2D.new()
 	var shape := CircleShape2D.new()
-	shape.radius = 6.0
+	shape.radius = 12.0 if _is_special else 6.0
 	collision.shape = shape
 	add_child(collision)
 

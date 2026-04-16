@@ -11,6 +11,7 @@ signal bp_changed(current: int, max_bp: int)
 signal died()
 signal booster_changed(is_active: bool)
 signal attacked(is_ranged: bool)
+signal special_attacked()  # 필살기 시그널
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Network Sync Constants
@@ -45,14 +46,19 @@ var _booster_timer: float = 0.0
 # 공격
 var _melee_cooldown_timer: float = 0.0
 var _ranged_cooldown_timer: float = 0.0
+var _special_cooldown_timer: float = 0.0  # 필살기 쿨다운
 
 # 근거리 히트박스
 var _melee_hitbox: Area2D = null
 var _melee_hitbox_timer: float = 0.0
 var _melee_hitbox_active: bool = false
+var _hitbox_damage: int = 0  # 현재 히트박스의 데미지
 
 # 방향
 var _facing_direction: Vector2 = Vector2.RIGHT
+
+# 카메라
+var _camera: Camera2D = null
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Properties
@@ -108,6 +114,10 @@ func init(data: CharacterData) -> void:
 	# 시각적 표시를 위한 임시 설정
 	_setup_visual()
 	_setup_hp_bar()
+	
+	# 플레이어만 카메라 활성화
+	if _is_controllable:
+		_setup_camera()
 
 
 func _setup_collision() -> void:
@@ -171,6 +181,13 @@ func _setup_hp_bar() -> void:
 	_hp_bar.add_theme_stylebox_override("background", bg_style)
 	
 	add_child(_hp_bar)
+
+
+func _setup_camera() -> void:
+	# 플레이어 카메라 생성
+	_camera = Camera2D.new()
+	_camera.enabled = true
+	add_child(_camera)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Movement
@@ -238,10 +255,12 @@ func _handle_input() -> void:
 		stop_boost()
 	
 	# 공격 입력
-	if Input.is_action_just_pressed("attack_melee"):
-		attack_melee()
-	if Input.is_action_just_pressed("attack_ranged"):
-		attack_ranged()
+	if Input.is_action_just_pressed("attack_type1"):
+		_execute_attack(_data.attack_type1)
+	if Input.is_action_just_pressed("attack_type2"):
+		_execute_attack(_data.attack_type2)
+	if Input.is_action_just_pressed("attack_special"):
+		attack_special()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Stats
@@ -325,6 +344,8 @@ func _update_cooldowns(delta: float) -> void:
 		_melee_cooldown_timer -= delta
 	if _ranged_cooldown_timer > 0:
 		_ranged_cooldown_timer -= delta
+	if _special_cooldown_timer > 0:
+		_special_cooldown_timer -= delta
 
 
 func _regen_mp(delta: float) -> void:
@@ -384,37 +405,44 @@ func attack_melee() -> bool:
 		return false
 	
 	_melee_cooldown_timer = _data.melee_cooldown
-	_activate_melee_hitbox()
+	_activate_hitbox(_data.melee_range / 2.0, _data.melee_power)
 	attacked.emit(false)
 	return true
 
 
-func _activate_melee_hitbox() -> void:
+func _activate_hitbox(radius: float, damage: int) -> void:
+	_hitbox_damage = damage
+	
 	# 히트박스가 없으면 생성
 	if not _melee_hitbox:
 		_melee_hitbox = Area2D.new()
 		_melee_hitbox.collision_mask = 1  # 레이어 1 (캐릭터) 감지
 		
-		# 충돌 모양 (캐릭터 앞쪽 원형)
+		# 충돌 모양 (원형)
 		var collision := CollisionShape2D.new()
 		var shape := CircleShape2D.new()
-		shape.radius = _data.melee_range / 2.0
 		collision.shape = shape
 		_melee_hitbox.add_child(collision)
 		
 		# 시각적 표시 (디버그용)
 		var visual := ColorRect.new()
 		visual.color = Color(1.0, 1.0, 0.0, 0.3)
-		visual.size = Vector2(_data.melee_range, _data.melee_range)
-		visual.position = Vector2(-_data.melee_range / 2.0, -_data.melee_range / 2.0)
 		_melee_hitbox.add_child(visual)
 		
 		# 시그널 연결
 		_melee_hitbox.body_entered.connect(_on_melee_hitbox_entered)
 		add_child(_melee_hitbox)
 	
-	# 히트박스 위치 설정 (캐릭터 앞쪽)
-	_melee_hitbox.position = _facing_direction * (_data.melee_range / 2.0 + 20.0)
+	# 히트박스 크기 및 위치 설정
+	var collision_shape: CollisionShape2D = _melee_hitbox.get_child(0)
+	var circle_shape: CircleShape2D = collision_shape.shape as CircleShape2D
+	circle_shape.radius = radius
+	
+	var visual_rect: ColorRect = _melee_hitbox.get_child(1)
+	visual_rect.size = Vector2(radius * 2, radius * 2)
+	visual_rect.position = Vector2(-radius, -radius)
+	
+	_melee_hitbox.position = _facing_direction * (radius + 20.0)
 	_melee_hitbox.monitoring = true
 	_melee_hitbox.visible = true
 	_melee_hitbox_active = true
@@ -443,7 +471,7 @@ func _on_melee_hitbox_entered(body: Node2D) -> void:
 	
 	if body is Character:
 		var character := body as Character
-		character.take_damage(_data.melee_power)
+		character.take_damage(_hitbox_damage)
 
 
 func attack_ranged() -> bool:
@@ -488,6 +516,111 @@ func can_attack_melee() -> bool:
 
 func can_attack_ranged() -> bool:
 	return not _is_dead and _ranged_cooldown_timer <= 0 and _current_bp >= _data.ranged_bp_cost
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Special Attack System (필살기)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+func attack_special() -> bool:
+	if _is_dead:
+		return false
+	
+	if _special_cooldown_timer > 0:
+		return false
+	
+	if not use_mp(_data.special_mp_cost):
+		return false
+	
+	_special_cooldown_timer = _data.special_cooldown
+	
+	# 필살기 타입에 따른 처리
+	match _data.special_type:
+		CharacterData.SpecialType.MELEE_AOE:
+			_execute_melee_aoe()
+		CharacterData.SpecialType.RANGED_MAGIC:
+			_execute_ranged_magic()
+	
+	special_attacked.emit()
+	return true
+
+
+func _execute_melee_aoe() -> void:
+	# 근접 광역기: Area2D 히트박스 사용
+	_activate_aoe_hitbox(_data.special_range, _data.special_power)
+	_show_special_effect(_data.special_range)
+
+
+func _activate_aoe_hitbox(radius: float, damage: int) -> void:
+	_hitbox_damage = damage
+	
+	# AOE용 히트박스 생성 (캐릭터 중심)
+	var aoe_hitbox := Area2D.new()
+	aoe_hitbox.collision_mask = 1  # 레이어 1 (캐릭터) 감지
+	
+	var collision := CollisionShape2D.new()
+	var shape := CircleShape2D.new()
+	shape.radius = radius
+	collision.shape = shape
+	aoe_hitbox.add_child(collision)
+	add_child(aoe_hitbox)
+	
+	# 현재 겹치는 모든 적에게 데미지
+	for body in aoe_hitbox.get_overlapping_bodies():
+		if body != self and body is Character:
+			body.take_damage(_hitbox_damage)
+	
+	# 즉시 제거
+	aoe_hitbox.queue_free()
+
+
+func _execute_ranged_magic() -> void:
+	# 원거리 마법: 강력한 투사체 발사
+	var projectile := Projectile.new()
+	projectile.init(
+		_facing_direction,
+		_data.projectile_speed * 1.2,  # 더 빠른 속도
+		_data.special_power,
+		self,
+		_data.special_range,
+		_data.element,
+		true  # is_special 플래그
+	)
+	projectile.position = position
+	
+	# 씬에 추가
+	var parent := get_parent()
+	if parent:
+		parent.add_child(projectile)
+	else:
+		get_tree().current_scene.add_child(projectile)
+
+
+func _show_special_effect(radius: float) -> void:
+	# 임시 시각 효과: 원형 히트박스 표시
+	var effect := ColorRect.new()
+	effect.color = Color(1.0, 0.8, 0.0, 0.5)  # 금색 반투명
+	effect.size = Vector2(radius * 2, radius * 2)
+	effect.position = Vector2(-radius, -radius)
+	effect.z_index = 10
+	add_child(effect)
+	
+	# 0.3초 후 제거
+	get_tree().create_timer(0.3).timeout.connect(effect.queue_free)
+
+
+func can_attack_special() -> bool:
+	return not _is_dead and _special_cooldown_timer <= 0 and _current_mp >= _data.special_mp_cost
+
+
+func _execute_attack(attack_type: CharacterData.AttackType) -> void:
+	match attack_type:
+		CharacterData.AttackType.MELEE:
+			attack_melee()
+		CharacterData.AttackType.RANGED:
+			attack_ranged()
+		CharacterData.AttackType.NONE:
+			pass  # 공격 없음
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Network Sync Methods

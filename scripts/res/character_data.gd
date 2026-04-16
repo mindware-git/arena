@@ -62,6 +62,19 @@ extends Resource
 # 공격 시스템
 # ═══════════════════════════════════════════════════════════════════════════════
 
+## 공격 타입 (버튼 매핑용)
+enum AttackType {
+	NONE,    # 공격 없음
+	MELEE,   # 근접 공격
+	RANGED   # 원거리 공격
+}
+
+## 기본 공격 (attack_type1 버튼)
+@export var attack_type1: AttackType = AttackType.MELEE
+
+## 보조 공격 (attack_type2 버튼)
+@export var attack_type2: AttackType = AttackType.RANGED
+
 ## 근거리 공격 쿨다운 (초)
 @export var melee_cooldown: float = 0.5
 
@@ -82,6 +95,30 @@ extends Resource
 
 ## 투사체 사거리
 @export var projectile_range: float = 500.0
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 필살기 시스템
+# ═══════════════════════════════════════════════════════════════════════════════
+
+## 필살기 타입
+enum SpecialType {
+	MELEE_AOE,    # 근접 광역기 (자이로)
+	RANGED_MAGIC  # 원거리 마법 (샤무)
+}
+
+@export var special_type: SpecialType = SpecialType.MELEE_AOE
+
+## 필살기 데미지
+@export var special_power: int = 50
+
+## 필살기 쿨다운 (초)
+@export var special_cooldown: float = 5.0
+
+## 필살기 MP 소모량
+@export var special_mp_cost: int = 30
+
+## 필살기 사거리 (근접 광역: 반경, 원거리: 투사체 사거리)
+@export var special_range: float = 150.0
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 등급 계산 (UI 표시용)

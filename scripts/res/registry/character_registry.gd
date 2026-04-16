@@ -40,6 +40,17 @@ func _register_gyro() -> void:
 	data.acceleration = 12.0
 	data.is_flying = false
 	
+	# 공격 타입 (자이로: 근접 위주)
+	data.attack_type1 = CharacterData.AttackType.MELEE
+	data.attack_type2 = CharacterData.AttackType.RANGED
+	
+	# 필살기 (근접 광역기)
+	data.special_type = CharacterData.SpecialType.MELEE_AOE
+	data.special_power = 50
+	data.special_cooldown = 5.0
+	data.special_mp_cost = 30
+	data.special_range = 150.0
+	
 	_characters[data.id] = data
 
 
@@ -64,6 +75,17 @@ func _register_shamu() -> void:
 	data.rotation_speed = 8.0
 	data.acceleration = 15.0
 	data.is_flying = true
+	
+	# 공격 타입 (샤무: 마법사 - 둘 다 원거리)
+	data.attack_type1 = CharacterData.AttackType.RANGED
+	data.attack_type2 = CharacterData.AttackType.RANGED
+	
+	# 필살기 (원거리 마법)
+	data.special_type = CharacterData.SpecialType.RANGED_MAGIC
+	data.special_power = 40
+	data.special_cooldown = 4.0
+	data.special_mp_cost = 35
+	data.special_range = 700.0
 	
 	_characters[data.id] = data
 
@@ -113,6 +135,10 @@ func _register_enemy_slime() -> void:
 	data.rotation_speed = 3.0
 	data.acceleration = 5.0
 	data.is_flying = false
+	
+	# 공격 타입 (슬라임: 근접만)
+	data.attack_type1 = CharacterData.AttackType.MELEE
+	data.attack_type2 = CharacterData.AttackType.NONE
 	
 	_characters[data.id] = data
 

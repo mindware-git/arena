@@ -1,351 +1,453 @@
 class_name BattleScreen
-extends Control
+extends Node2D
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Battle Screen
 # 실제 게임 플레이 화면 (Arena)
+# - battle.gd의 모든 기능을 통합
 # ═══════════════════════════════════════════════════════════════════════════════
 
-signal transition_requested(next_screen: Node)
+# ═══════════════════════════════════════════════════════════════════════════════
+# Signals
+# ═══════════════════════════════════════════════════════════════════════════════
 
-var _player: Character
-var _enemy: Character
+signal battle_started()
+signal battle_ended(winning_team: int)
+signal player_spawned(player: Character)
+signal enemy_spawned(enemy: Character)
+signal character_died(character: Character)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Constants
+# ═══════════════════════════════════════════════════════════════════════════════
+
+const PLAYER_SPAWN_POSITION := Vector2(200, 300)
+const ENEMY_SPAWN_POSITIONS: Array[Vector2] = [
+	Vector2(500, 200),
+	Vector2(600, 300),
+	Vector2(500, 400),
+]
+
+const BATTLE_HUD_SCENE = preload("res://scenes/ui/battle_hud.tscn")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Variables
+# ═══════════════════════════════════════════════════════════════════════════════
+
 var _registry: CharacterRegistry
-var _game_time: float = 0.0
-var _is_game_over: bool = false
-var _is_multiplayer: bool = false  # 멀티플레이어 여부
+var _player: Character
+var _enemies: Array[Character] = []
+
+# 배틀 상태
+var _is_battle_active: bool = false
+var _battle_time: float = 0.0
+var _kill_count: int = 0
+
+# 멀티플레이어
+var _is_multiplayer: bool = false
 var _remote_players: Dictionary = {}  # peer_id -> Character
 
+# UI
+var _battle_hud: CanvasLayer
+var _hp_bar: ProgressBar
+var _mp_bar: ProgressBar
+var _bp_bar: ProgressBar
 var _time_label: Label
-var _player_hp_bar: ProgressBar
-var _player_mp_bar: ProgressBar
-var _player_bp_bar: ProgressBar
-var _enemy_hp_bar: ProgressBar
+var _kill_count_label: Label
 var _player_name_label: Label
-var _enemy_name_label: Label
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Properties
+# ═══════════════════════════════════════════════════════════════════════════════
+
+var player: Character:
+	get: return _player
+
+var enemies: Array[Character]:
+	get: return _enemies
+
+var is_battle_active: bool:
+	get: return _is_battle_active
+
+var battle_time: float:
+	get: return _battle_time
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Lifecycle
 # ═══════════════════════════════════════════════════════════════════════════════
 
 func _ready() -> void:
-	anchors_preset = Control.PRESET_FULL_RECT
 	_registry = CharacterRegistry.new()
-	_create_ui()
-	_spawn_characters()
+	_create_battle_ui()
 
 
 func _process(delta: float) -> void:
-	if _is_game_over:
+	if not _is_battle_active:
 		return
 	
-	_game_time += delta
-	_update_time_display()
-	_check_game_over()
+	_battle_time += delta
+	_check_battle_end_conditions()
+	_update_battle_ui()
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# UI
+# ═══════════════════════════════════════════════════════════════════════════════
 
-func _create_ui() -> void:
-	# 게임 화면 (배경)
-	var bg := ColorRect.new()
-	bg.color = Color(0.1, 0.1, 0.15)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
+func _create_battle_ui() -> void:
+	# BattleHUD 인스턴스화
+	_battle_hud = BATTLE_HUD_SCENE.instantiate()
+	add_child(_battle_hud)
+	_setup_action_buttons()
 	
-	# 상단 HUD
-	_create_hud()
+	# 추가 UI 컨테이너 (HP/MP/BP 바, 시간, 킬 카운트)
+	var canvas := CanvasLayer.new()
+	canvas.layer = 1
+	add_child(canvas)
 	
-	# 일시정지 버튼
-	var pause_btn := Button.new()
-	pause_btn.text = "⏸"
-	pause_btn.position = Vector2(10, 10)
-	pause_btn.size = Vector2(40, 40)
-	pause_btn.pressed.connect(_on_pause_pressed)
-	add_child(pause_btn)
-
-
-func _create_hud() -> void:
-	# 플레이어 상태 (좌측 하단)
-	var player_hud := VBoxContainer.new()
-	player_hud.position = Vector2(20, 580)
-	player_hud.size = Vector2(200, 130)
-	add_child(player_hud)
+	var control := Control.new()
+	control.set_anchors_preset(Control.PRESET_FULL_RECT)
+	canvas.add_child(control)
 	
+	# 상단 정보 패널
+	var top_panel := HBoxContainer.new()
+	top_panel.position = Vector2(10, 10)
+	control.add_child(top_panel)
+	
+	# 플레이어 이름
 	_player_name_label = Label.new()
-	_player_name_label.text = "Player_001"
-	_player_name_label.add_theme_font_size_override("font_size", 14)
-	player_hud.add_child(_player_name_label)
+	_player_name_label.add_theme_font_size_override("font_size", 18)
+	_player_name_label.add_theme_color_override("font_color", Color.CYAN)
+	top_panel.add_child(_player_name_label)
 	
-	# HP
-	var hp_box := HBoxContainer.new()
-	player_hud.add_child(hp_box)
+	# 스탯 컨테이너
+	var stats_panel := VBoxContainer.new()
+	stats_panel.position = Vector2(10, 40)
+	control.add_child(stats_panel)
+	
+	# HP 바
+	var hp_container := HBoxContainer.new()
+	stats_panel.add_child(hp_container)
 	
 	var hp_label := Label.new()
 	hp_label.text = "HP"
 	hp_label.custom_minimum_size = Vector2(30, 20)
-	hp_box.add_child(hp_label)
+	hp_container.add_child(hp_label)
 	
-	_player_hp_bar = ProgressBar.new()
-	_player_hp_bar.custom_minimum_size = Vector2(170, 20)
-	_player_hp_bar.value = 100
-	_player_hp_bar.show_percentage = false
-	hp_box.add_child(_player_hp_bar)
+	_hp_bar = ProgressBar.new()
+	_hp_bar.custom_minimum_size = Vector2(200, 20)
+	_hp_bar.show_percentage = false
+	hp_container.add_child(_hp_bar)
 	
-	# MP
-	var mp_box := HBoxContainer.new()
-	player_hud.add_child(mp_box)
+	# MP 바
+	var mp_container := HBoxContainer.new()
+	stats_panel.add_child(mp_container)
 	
 	var mp_label := Label.new()
 	mp_label.text = "MP"
 	mp_label.custom_minimum_size = Vector2(30, 20)
-	mp_box.add_child(mp_label)
+	mp_container.add_child(mp_label)
 	
-	_player_mp_bar = ProgressBar.new()
-	_player_mp_bar.custom_minimum_size = Vector2(170, 20)
-	_player_mp_bar.value = 100
-	_player_mp_bar.show_percentage = false
-	_player_mp_bar.modulate = Color(0.3, 0.5, 0.9)
-	mp_box.add_child(_player_mp_bar)
+	_mp_bar = ProgressBar.new()
+	_mp_bar.custom_minimum_size = Vector2(200, 20)
+	_mp_bar.show_percentage = false
+	mp_container.add_child(_mp_bar)
 	
-	# BP
-	var bp_box := HBoxContainer.new()
-	player_hud.add_child(bp_box)
+	# BP 바
+	var bp_container := HBoxContainer.new()
+	stats_panel.add_child(bp_container)
 	
 	var bp_label := Label.new()
 	bp_label.text = "BP"
 	bp_label.custom_minimum_size = Vector2(30, 20)
-	bp_box.add_child(bp_label)
+	bp_container.add_child(bp_label)
 	
-	_player_bp_bar = ProgressBar.new()
-	_player_bp_bar.custom_minimum_size = Vector2(170, 20)
-	_player_bp_bar.value = 100
-	_player_bp_bar.show_percentage = false
-	_player_bp_bar.modulate = Color(0.9, 0.6, 0.2)
-	bp_box.add_child(_player_bp_bar)
+	_bp_bar = ProgressBar.new()
+	_bp_bar.custom_minimum_size = Vector2(200, 20)
+	_bp_bar.show_percentage = false
+	bp_container.add_child(_bp_bar)
 	
-	# 적 상태 (우측 하단)
-	var enemy_hud := VBoxContainer.new()
-	enemy_hud.position = Vector2(1060, 580)
-	enemy_hud.size = Vector2(200, 80)
-	add_child(enemy_hud)
+	# 우측 상단: 시간, 킬 카운트
+	var right_panel := VBoxContainer.new()
+	right_panel.position = Vector2(700, 10)
+	right_panel.alignment = BoxContainer.ALIGNMENT_END
+	control.add_child(right_panel)
 	
-	_enemy_name_label = Label.new()
-	_enemy_name_label.text = "Enemy_Bot"
-	_enemy_name_label.add_theme_font_size_override("font_size", 14)
-	enemy_hud.add_child(_enemy_name_label)
-	
-	_enemy_hp_bar = ProgressBar.new()
-	_enemy_hp_bar.custom_minimum_size = Vector2(200, 25)
-	_enemy_hp_bar.value = 100
-	_enemy_hp_bar.show_percentage = false
-	enemy_hud.add_child(_enemy_hp_bar)
-	
-	# 게임 시간 (상단 중앙)
 	_time_label = Label.new()
-	_time_label.text = "05:00"
-	_time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_time_label.position = Vector2(0, 10)
-	_time_label.size = Vector2(1280, 40)
-	_time_label.add_theme_font_size_override("font_size", 28)
-	_time_label.add_theme_color_override("font_color", Color(0.9, 0.9, 0.9))
-	add_child(_time_label)
-
-
-func _spawn_characters() -> void:
-	# 멀티플레이어 모드 확인
-	_is_multiplayer = OnlineMatch.nakama_socket != null and not OnlineMatch.get_match_id().is_empty()
+	_time_label.add_theme_font_size_override("font_size", 16)
+	right_panel.add_child(_time_label)
 	
-	if _is_multiplayer:
-		_spawn_multiplayer_characters()
-	else:
-		_spawn_singleplayer_characters()
+	_kill_count_label = Label.new()
+	_kill_count_label.add_theme_font_size_override("font_size", 14)
+	right_panel.add_child(_kill_count_label)
 
 
-func _spawn_singleplayer_characters() -> void:
-	# 플레이어 캐릭터
-	var player_data := _registry.get_character("gyro")
-	_player = Character.new()
-	_player.init(player_data)
-	_player.position = Vector2(300, 360)
-	_player.is_controllable = true  # 로컬 플레이어
-	_player.died.connect(_on_player_died)
-	_player.hp_changed.connect(_on_player_hp_changed)
-	_player.mp_changed.connect(_on_player_mp_changed)
-	_player.bp_changed.connect(_on_player_bp_changed)
-	add_child(_player)
+func _setup_action_buttons() -> void:
+	var hbox: HBoxContainer = _battle_hud.get_node("Control/Control/HBoxContainer")
+	if not hbox:
+		push_error("HBoxContainer not found in BattleHUD")
+		return
 	
-	# 적 캐릭터 (간단한 AI)
-	var enemy_data := _registry.get_character("shamu")
-	_enemy = Character.new()
-	_enemy.init(enemy_data)
-	_enemy.position = Vector2(980, 360)
-	_enemy.died.connect(_on_enemy_died)
-	_enemy.hp_changed.connect(_on_enemy_hp_changed)
-	# 적은 플레이어 입력 비활성화
-	_enemy.set_physics_process(false)
-	add_child(_enemy)
+	# HBoxContainer offset 설정 (화면 하단에서 20px 위로)
+	hbox.offset_bottom = -20
 	
-	# 간단한 적 AI 시작
-	_setup_enemy_ai()
-
-
-func _spawn_multiplayer_characters() -> void:
-	# OnlineMatch.players에서 플레이어 정보 가져오기
-	var players = OnlineMatch.players
-	var my_peer_id = multiplayer.get_unique_id()
+	var template_btn: TouchScreenButton = hbox.get_node("TouchScreenButton")
+	if not template_btn:
+		push_error("TouchScreenButton template not found")
+		return
 	
-	print("Spawning multiplayer characters. My peer_id: %d, players: %s" % [my_peer_id, players.keys()])
+	# 버튼 크기 및 간격 설정
+	const BUTTON_SIZE := 80
+	const BUTTON_SPACING := 10
 	
-	# 플레이어 스폰 위치
-	var spawn_positions = [
-		Vector2(300, 360),   # Player 1 (왼쪽)
-		Vector2(980, 360)    # Player 2 (오른쪽)
-	]
+	# 대쉬 버튼 (첫 번째)
+	template_btn.action = "booster"
+	template_btn.name = "DashButton"
+	template_btn.position = Vector2(0, 0)
+	_create_button_texture(template_btn, Color(0.2, 0.6, 0.9))
 	
-	var spawn_index = 0
-	for peer_id in players:
-		var player_info = players[peer_id]
-		var player_data: CharacterData
-		
-		# TODO: 캐릭터 선택 동기화 필요. 일단 기본 캐릭터 사용
-		if peer_id == my_peer_id:
-			player_data = _registry.get_character("gyro")
-		else:
-			player_data = _registry.get_character("shamu")
-		
-		var character := Character.new()
-		character.init(player_data)
-		character.position = spawn_positions[spawn_index]
-		character.name = "Player_%d" % peer_id
-		
-		# 멀티플레이어 권한 설정
-		character.set_multiplayer_authority(peer_id)
-		
-		if peer_id == my_peer_id:
-			# 로컬 플레이어
-			_player = character
-			character.is_controllable = true
-			character.died.connect(_on_player_died)
-			character.hp_changed.connect(_on_player_hp_changed)
-			character.mp_changed.connect(_on_player_mp_changed)
-			character.bp_changed.connect(_on_player_bp_changed)
-			# 이름 업데이트
-			if _player_name_label and player_info.username:
-				_player_name_label.text = player_info.username
-		else:
-			# 원격 플레이어
-			_remote_players[peer_id] = character
-			character.set_network_controlled(true)
-			_enemy = character  # 호환성을 위해 _enemy에도 할당
-			character.hp_changed.connect(_on_enemy_hp_changed)
-			# 이름 업데이트
-			if _enemy_name_label and player_info.username:
-				_enemy_name_label.text = player_info.username
-		
-		add_child(character)
-		spawn_index += 1
+	# 기본 공격 버튼 (두 번째) - attack_type1
+	var attack1_btn: TouchScreenButton = template_btn.duplicate()
+	attack1_btn.action = "attack_type1"
+	attack1_btn.name = "Attack1Button"
+	attack1_btn.position = Vector2(BUTTON_SIZE + BUTTON_SPACING, 0)
+	_create_button_texture(attack1_btn, Color(0.9, 0.4, 0.2))
+	hbox.add_child(attack1_btn)
 	
-	print("Multiplayer characters spawned. Local: %s, Remote: %d" % [_player.name, _remote_players.size()])
+	# 보조 공격 버튼 (세 번째) - attack_type2
+	var attack2_btn: TouchScreenButton = template_btn.duplicate()
+	attack2_btn.action = "attack_type2"
+	attack2_btn.name = "Attack2Button"
+	attack2_btn.position = Vector2((BUTTON_SIZE + BUTTON_SPACING) * 2, 0)
+	_create_button_texture(attack2_btn, Color(0.6, 0.2, 0.8))
+	hbox.add_child(attack2_btn)
+	
+	# 필살기 버튼 (네 번째)
+	var special_btn: TouchScreenButton = template_btn.duplicate()
+	special_btn.action = "attack_special"
+	special_btn.name = "SpecialButton"
+	special_btn.position = Vector2((BUTTON_SIZE + BUTTON_SPACING) * 3, 0)
+	_create_button_texture(special_btn, Color(1.0, 0.8, 0.0))  # 금색
+	hbox.add_child(special_btn)
 
 
-func _setup_enemy_ai() -> void:
-	# 간단한 AI: 랜덤하게 이동하고 공격
-	while not _is_game_over and is_instance_valid(_enemy) and not _enemy.is_dead:
-		await get_tree().create_timer(0.5).timeout
-		
-		if _is_game_over or not is_instance_valid(_enemy) or _enemy.is_dead:
-			break
-		
-		# 플레이어 방향으로 이동
-		if is_instance_valid(_player):
-			var direction := (_player.position - _enemy.position).normalized()
-			_enemy._facing_direction = direction
-			
-			# 이동 (velocity 직접 설정)
-			_enemy.velocity = direction * _enemy.character_data.max_speed * 0.5
-			_enemy.move_and_slide()
-			
-			# 가끔 공격
-			if randf() > 0.6:
-				if _enemy.position.distance_to(_player.position) < 100:
-					_enemy.attack_melee()
-				else:
-					_enemy.attack_ranged()
+func _create_button_texture(btn: TouchScreenButton, color: Color) -> void:
+	var image := Image.create(80, 80, false, Image.FORMAT_RGBA8)
+	image.fill(color)
+	var texture := ImageTexture.create_from_image(image)
+	btn.texture_normal = texture
+	
+	var pressed_image := Image.create(80, 80, false, Image.FORMAT_RGBA8)
+	pressed_image.fill(color.lightened(0.3))
+	btn.texture_pressed = ImageTexture.create_from_image(pressed_image)
 
 
-func _update_time_display() -> void:
-	var remaining: int = maxi(0, 300 - int(_game_time))
-	@warning_ignore("integer_division")
-	var minutes: int = remaining / 60
-	var seconds: int = remaining % 60
+func _update_battle_ui() -> void:
+	if not _player or not _player.character_data:
+		return
+	
+	# HP/MP/BP 바 업데이트
+	_hp_bar.max_value = _player.character_data.max_hp
+	_hp_bar.value = _player.current_hp
+	
+	_mp_bar.max_value = _player.character_data.max_mp
+	_mp_bar.value = _player.current_mp
+	
+	_bp_bar.max_value = _player.character_data.max_bp
+	_bp_bar.value = _player.current_bp
+	
+	# 플레이어 이름
+	_player_name_label.text = _player.character_data.display_name
+	
+	# 시간
+	var minutes := int(_battle_time) / 60
+	var seconds := int(_battle_time) % 60
 	_time_label.text = "%02d:%02d" % [minutes, seconds]
 	
-	if remaining <= 0:
-		_on_time_up()
+	# 킬 카운트
+	_kill_count_label.text = "Kills: %d" % _kill_count
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Battle Control
+# ═══════════════════════════════════════════════════════════════════════════════
+
+func start_battle(player_character_id: String, enemy_character_ids: Array[String] = []) -> void:
+	_clear_battle()
+	_kill_count = 0
+	
+	# 플레이어 스폰
+	spawn_player(player_character_id)
+	
+	# 적 스폰
+	if enemy_character_ids.is_empty():
+		# 기본 적 스폰
+		for i in range(ENEMY_SPAWN_POSITIONS.size()):
+			spawn_enemy("enemy_slime", ENEMY_SPAWN_POSITIONS[i])
+	else:
+		# 지정된 적 스폰
+		for i in range(enemy_character_ids.size()):
+			var pos := ENEMY_SPAWN_POSITIONS[i % ENEMY_SPAWN_POSITIONS.size()]
+			spawn_enemy(enemy_character_ids[i], pos)
+	
+	_is_battle_active = true
+	_battle_time = 0.0
+	battle_started.emit()
 
 
-func _check_game_over() -> void:
-	# HP 바 업데이트
-	if is_instance_valid(_player):
-		_player_hp_bar.value = (float(_player.current_hp) / _player.character_data.max_hp) * 100
-		_player_mp_bar.value = (float(_player.current_mp) / _player.character_data.max_mp) * 100
-		_player_bp_bar.value = (float(_player.current_bp) / _player.character_data.max_bp) * 100
+func end_battle(winning_team: int) -> void:
+	_is_battle_active = false
+	battle_ended.emit(winning_team)
 
 
-func _on_player_hp_changed(current: int, max_hp: int) -> void:
-	_player_hp_bar.value = (float(current) / max_hp) * 100
+func reset_battle() -> void:
+	_clear_battle()
+	start_battle("gyro")  # 기본 캐릭터로 리셋
 
 
-func _on_player_mp_changed(current: int, max_mp: int) -> void:
-	_player_mp_bar.value = (float(current) / max_mp) * 100
+func _clear_battle() -> void:
+	# 플레이어 제거
+	if _player and is_instance_valid(_player):
+		_player.queue_free()
+	_player = null
+	
+	# 적들 제거
+	for enemy in _enemies:
+		if is_instance_valid(enemy):
+			enemy.queue_free()
+	_enemies.clear()
+	
+	_is_battle_active = false
+	_battle_time = 0.0
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Character Spawning
+# ═══════════════════════════════════════════════════════════════════════════════
+
+func spawn_player(character_id: String) -> Character:
+	var data := _registry.get_character(character_id)
+	if not data:
+		push_warning("Player character not found: " + character_id)
+		return null
+	
+	_player = Character.new()
+	_player.is_controllable = true  # init() 전에 설정해야 카메라가 활성화됨
+	_player.init(data)
+	_player.position = PLAYER_SPAWN_POSITION
+	
+	# 시그널 연결
+	_player.died.connect(_on_player_died)
+	
+	add_child(_player)
+	player_spawned.emit(_player)
+	
+	return _player
 
 
-func _on_player_bp_changed(current: int, max_bp: int) -> void:
-	_player_bp_bar.value = (float(current) / max_bp) * 100
+func spawn_enemy(character_id: String, position: Vector2 = Vector2.ZERO) -> Character:
+	var data := _registry.get_character(character_id)
+	if not data:
+		push_error("Enemy character not found: " + character_id)
+		return null
+	
+	var enemy := Character.new()
+	enemy.init(data)
+	enemy.position = position if position != Vector2.ZERO else ENEMY_SPAWN_POSITIONS[_enemies.size() % ENEMY_SPAWN_POSITIONS.size()]
+	enemy.is_controllable = false
+	
+	# 시그널 연결
+	enemy.died.connect(_on_enemy_died.bind(enemy))
+	
+	add_child(enemy)
+	_enemies.append(enemy)
+	enemy_spawned.emit(enemy)
+	
+	return enemy
 
 
-func _on_enemy_hp_changed(current: int, max_hp: int) -> void:
-	if is_instance_valid(_enemy_hp_bar):
-		_enemy_hp_bar.value = (float(current) / max_hp) * 100
+func spawn_enemy_at_random_position(character_id: String) -> Character:
+	var random_x := randf_range(400, 700)
+	var random_y := randf_range(150, 450)
+	return spawn_enemy(character_id, Vector2(random_x, random_y))
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Battle State
+# ═══════════════════════════════════════════════════════════════════════════════
+
+func _check_battle_end_conditions() -> void:
+	# 플레이어 사망 체크
+	if _player and _player.is_dead:
+		end_battle(1)  # 적 팀 승리
+		return
+	
+	# 모든 적 처치 체크
+	var all_enemies_dead := true
+	for enemy in _enemies:
+		if is_instance_valid(enemy) and not enemy.is_dead:
+			all_enemies_dead = false
+			break
+	
+	if all_enemies_dead and _enemies.size() > 0:
+		end_battle(0)  # 플레이어 팀 승리
+
+
+func get_alive_enemy_count() -> int:
+	var count := 0
+	for enemy in _enemies:
+		if is_instance_valid(enemy) and not enemy.is_dead:
+			count += 1
+	return count
+
+
+func get_battle_info() -> Dictionary:
+	return {
+		"is_active": _is_battle_active,
+		"battle_time": _battle_time,
+		"player_hp": _player.current_hp if _player else 0,
+		"player_max_hp": _player.character_data.max_hp if _player and _player.character_data else 0,
+		"enemy_count": _enemies.size(),
+		"alive_enemy_count": get_alive_enemy_count(),
+		"kill_count": _kill_count,
+	}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Signal Handlers
+# ═══════════════════════════════════════════════════════════════════════════════
 
 func _on_player_died() -> void:
-	_is_game_over = true
-	await get_tree().create_timer(1.0).timeout
-	_show_result(false)
+	character_died.emit(_player)
 
 
-func _on_enemy_died() -> void:
-	_is_game_over = true
-	await get_tree().create_timer(1.0).timeout
-	_show_result(true)
+func _on_enemy_died(enemy: Character) -> void:
+	character_died.emit(enemy)
+	_kill_count += 1
+	# 적 제거 (약간의 딜레이 후)
+	call_deferred("_remove_enemy", enemy)
 
 
-func _on_time_up() -> void:
-	_is_game_over = true
-	# HP가 더 높은 쪽이 승리
-	var player_wins := _player.current_hp > _enemy.current_hp
-	_show_result(player_wins)
+func _remove_enemy(enemy: Character) -> void:
+	if _enemies.has(enemy):
+		_enemies.erase(enemy)
+	if is_instance_valid(enemy):
+		enemy.queue_free()
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Network Sync (for multiplayer)
+# ═══════════════════════════════════════════════════════════════════════════════
 
-func _show_result(player_wins: bool) -> void:
-	var result := ResultScreen.new()
-	result.set_result(player_wins, _game_time)
-	transition_requested.emit(result)
-
-
-func _on_pause_pressed() -> void:
-	# 간단한 일시정지 (게임 시간 정지)
-	_is_game_over = true
-	get_tree().paused = true
+func setup_network_player(peer_id: int, character_id: String, is_local: bool) -> Character:
+	var data := _registry.get_character(character_id)
+	if not data:
+		return null
 	
-	# 재개 버튼 표시
-	var resume_btn := Button.new()
-	resume_btn.text = "계속하기"
-	resume_btn.position = Vector2(540, 300)
-	resume_btn.size = Vector2(200, 50)
-	resume_btn.pressed.connect(func():
-		get_tree().paused = false
-		_is_game_over = false
-		resume_btn.queue_free()
-	)
-	add_child(resume_btn)
+	var character := Character.new()
+	character.is_controllable = is_local  # init() 전에 설정
+	character.init(data)
+	character.position = PLAYER_SPAWN_POSITION
+	character.set_network_controlled(not is_local)
+	
+	add_child(character)
+	
+	if is_local:
+		_player = character
+		player_spawned.emit(character)
+	
+	return character
