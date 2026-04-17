@@ -14,7 +14,6 @@ signal transition_requested(next_screen: Node)
 
 const CHAR_SELECT_OP_CODE := 9004  # 캐릭터 선택 동기화 op_code
 
-var _is_multiplayer: bool = false
 var _my_character_id: String = ""
 var _my_ready: bool = false
 var _opponent_character_id: String = ""
@@ -232,8 +231,7 @@ func _get_stats_text() -> String:
 
 func _on_back_pressed() -> void:
 	# 멀티플레이어에서 나가기
-	if _is_multiplayer:
-		OnlineMatch.leave()
+	OnlineMatch.leave()
 	var lobby := LobbyScreen.new()
 	transition_requested.emit(lobby)
 
@@ -243,17 +241,12 @@ func _on_confirm_pressed() -> void:
 	_my_character_id = _character_ids[_selected_index]
 	_my_ready = true
 	
-	if _is_multiplayer:
-		# 멀티플레이어: 상대방에게 선택 전송
-		_send_character_selection()
-		_update_status_ui()
-		
-		# 양쪽 모두 준비되었는지 확인
-		_check_both_ready()
-	else:
-		# 싱글플레이어: 바로 전환
-		var battle := BattleScreen.new()
-		transition_requested.emit(battle)
+	# 상대방에게 선택 전송
+	_send_character_selection()
+	_update_status_ui()
+	
+	# 양쪽 모두 준비되었는지 확인
+	_check_both_ready()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -261,11 +254,9 @@ func _on_confirm_pressed() -> void:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 func _setup_multiplayer() -> void:
-	# 멀티플레이어 모드 확인
-	_is_multiplayer = OnlineMatch.nakama_socket != null and not OnlineMatch.get_match_id().is_empty()
-	
-	if not _is_multiplayer:
-		return
+	# 소켓과 match_id가 없으면 잘못된 상태
+	assert(OnlineMatch.nakama_socket != null, "CharacterSelectScreen: Nakama socket is null!")
+	assert(not OnlineMatch.get_match_id().is_empty(), "CharacterSelectScreen: Match ID is empty!")
 	
 	print("CharacterSelectScreen: Multiplayer mode enabled")
 	
@@ -359,4 +350,15 @@ func _check_both_ready() -> void:
 		await get_tree().create_timer(0.5).timeout
 		
 		var battle := BattleScreen.new()
+		
+		# 아군/적군 정보 구성
+		var allies: Array[Dictionary] = []
+		var enemies: Array[Dictionary] = []
+		
+		# 상대방을 적군으로 추가
+		if _opponent_peer_id > 0 and not _opponent_character_id.is_empty():
+			enemies.append({"peer_id": _opponent_peer_id, "character_id": _opponent_character_id})
+		
+		# 데이터만 설정 (start_battle은 _ready()에서 호출됨)
+		battle.set_battle_data(_my_character_id, allies, enemies)
 		transition_requested.emit(battle)

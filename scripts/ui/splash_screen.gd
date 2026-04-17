@@ -1,5 +1,5 @@
 class_name SplashScreen
-extends Control
+extends Node2D
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Splash Screen
@@ -13,16 +13,25 @@ signal transition_requested(next_screen: Node)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 func _ready() -> void:
-	anchors_preset = Control.PRESET_FULL_RECT
 	_create_ui()
 
 
 func _create_ui() -> void:
+	# CanvasLayer 생성
+	var canvas_layer := CanvasLayer.new()
+	add_child(canvas_layer)
+	
+	# UI 컨테이너 (Control)
+	var ui_container := Control.new()
+	ui_container.name = "UIContainer"
+	ui_container.set_anchors_preset(Control.PRESET_FULL_RECT)
+	canvas_layer.add_child(ui_container)
+	
 	# 배경
 	var bg := ColorRect.new()
 	bg.color = Color(0.05, 0.05, 0.1)
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
+	ui_container.add_child(bg)
 	
 	# 로고/타이틀
 	var title := Label.new()
@@ -35,7 +44,7 @@ func _create_ui() -> void:
 	title.size = Vector2(200, 100)
 	title.add_theme_font_size_override("font_size", 48)
 	title.add_theme_color_override("font_color", Color(0.9, 0.7, 0.2))
-	add_child(title)
+	ui_container.add_child(title)
 	
 	# 부제목
 	var subtitle := Label.new()
@@ -46,7 +55,7 @@ func _create_ui() -> void:
 	subtitle.size = Vector2(200, 30)
 	subtitle.add_theme_font_size_override("font_size", 16)
 	subtitle.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
-	add_child(subtitle)
+	ui_container.add_child(subtitle)
 	
 	# 시작 버튼
 	var start_btn := Button.new()
@@ -56,7 +65,7 @@ func _create_ui() -> void:
 	start_btn.position = Vector2(-80, 150)
 	start_btn.size = Vector2(160, 50)
 	start_btn.pressed.connect(_on_start_pressed)
-	add_child(start_btn)
+	ui_container.add_child(start_btn)
 	
 	# 버전 표시
 	var version := Label.new()
@@ -64,7 +73,7 @@ func _create_ui() -> void:
 	version.position = Vector2(10, 690)
 	version.add_theme_font_size_override("font_size", 12)
 	version.add_theme_color_override("font_color", Color(0.5, 0.5, 0.5))
-	add_child(version)
+	ui_container.add_child(version)
 
 
 func _on_start_pressed() -> void:

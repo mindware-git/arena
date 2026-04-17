@@ -10,8 +10,7 @@ signal mp_changed(current: int, max_mp: int)
 signal bp_changed(current: int, max_bp: int)
 signal died()
 signal booster_changed(is_active: bool)
-signal attacked(is_ranged: bool)
-signal special_attacked()  # 필살기 시그널
+signal attacked(attack_data: CharacterData.Attack)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Network Sync Constants
@@ -43,19 +42,21 @@ var _hp_bar: ProgressBar = null
 var _is_boosting: bool = false
 var _booster_timer: float = 0.0
 
-# 공격
-var _melee_cooldown_timer: float = 0.0
-var _ranged_cooldown_timer: float = 0.0
-var _special_cooldown_timer: float = 0.0  # 필살기 쿨다운
+# 공격 쿨다운 (attack_index -> timer)
+var _cooldowns: Dictionary = {}
 
 # 근거리 히트박스
 var _melee_hitbox: Area2D = null
 var _melee_hitbox_timer: float = 0.0
 var _melee_hitbox_active: bool = false
 var _hitbox_damage: int = 0  # 현재 히트박스의 데미지
+var _hitbox_duration: float = 0.2  # 현재 히트박스 지속 시간
 
 # 방향
 var _facing_direction: Vector2 = Vector2.RIGHT
+
+# Aim 표시
+var _aim_line: Line2D = null
 
 # 카메라
 var _camera: Camera2D = null
@@ -105,6 +106,11 @@ func init(data: CharacterData) -> void:
 	_current_bp = data.max_bp
 	_is_dead = false
 	
+	# 쿨다운 초기화
+	_cooldowns.clear()
+	for i in range(data.get_attack_count()):
+		_cooldowns[i] = 0.0
+	
 	# 충돌 레이어 설정 (레이어 1: 캐릭터)
 	collision_layer = 1
 	
@@ -118,6 +124,9 @@ func init(data: CharacterData) -> void:
 	# 플레이어만 카메라 활성화
 	if _is_controllable:
 		_setup_camera()
+	
+	# Aim 표시 설정
+	_setup_aim_indicator()
 
 
 func _setup_collision() -> void:
@@ -131,14 +140,21 @@ func _setup_collision() -> void:
 
 
 func _setup_visual() -> void:
-	# 임시: 색상으로 속성 표시
-	var sprite := ColorRect.new()
-	sprite.color = _get_element_color()
-	sprite.size = Vector2(40, 60)
-	sprite.position = Vector2(-20, -30)
-	add_child(sprite)
+	# 샤무인 경우 AnimatedSprite2D 사용
+	if _data.id == "shamu":
+		var sprite := AnimatedSprite2D.new()
+		sprite.sprite_frames = load("res://asset/sprite/shamu_sprite.tres")
+		sprite.play("default")
+		add_child(sprite)
+	else:
+		# 기존: 색상으로 속성 표시
+		var sprite := ColorRect.new()
+		sprite.color = _get_element_color()
+		sprite.size = Vector2(40, 60)
+		sprite.position = Vector2(-20, -30)
+		add_child(sprite)
 	
-	# 이름 표시
+	# 이름 표시 (공통)
 	var label := Label.new()
 	label.text = _data.display_name
 	label.position = Vector2(-20, -50)
@@ -189,6 +205,27 @@ func _setup_camera() -> void:
 	_camera.enabled = true
 	add_child(_camera)
 
+
+func _setup_aim_indicator() -> void:
+	# Aim 방향 표시용 Line2D 생성
+	_aim_line = Line2D.new()
+	_aim_line.width = 2.0
+	_aim_line.default_color = Color(1.0, 1.0, 0.0, 0.7)  # 노란색, 반투명
+	_aim_line.z_index = 5
+	add_child(_aim_line)
+	_update_aim_line()
+
+
+func _update_aim_line() -> void:
+	if not _aim_line:
+		return
+	
+	# 캐릭터 중심에서 facing_direction 방향으로 선 그리기
+	var line_length := 50.0  # 선 길이
+	_aim_line.clear_points()
+	_aim_line.add_point(Vector2.ZERO)  # 캐릭터 중심
+	_aim_line.add_point(_facing_direction * line_length)  # 방향 끝점
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Movement
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -219,21 +256,26 @@ func _physics_process(delta: float) -> void:
 func _move(delta: float) -> void:
 	var input_dir := Vector2.ZERO
 	
-	# 방향키만 사용 (WASD 제거)
-	if Input.is_action_pressed("ui_left"):
-		input_dir.x -= 1
-	if Input.is_action_pressed("ui_right"):
-		input_dir.x += 1
-	if Input.is_action_pressed("ui_up"):
-		input_dir.y -= 1
-	if Input.is_action_pressed("ui_down"):
-		input_dir.y += 1
-	
-	input_dir = input_dir.normalized()
+	# Virtual Joystick 찾기
+	var joystick = _find_virtual_joystick()
+	if joystick:
+		input_dir = joystick.output.normalized()
+	else:
+		# 폴백: 방향키 사용
+		if Input.is_action_pressed("ui_left"):
+			input_dir.x -= 1
+		if Input.is_action_pressed("ui_right"):
+			input_dir.x += 1
+		if Input.is_action_pressed("ui_up"):
+			input_dir.y -= 1
+		if Input.is_action_pressed("ui_down"):
+			input_dir.y += 1
+		input_dir = input_dir.normalized()
 	
 	# 이동 방향 업데이트
 	if input_dir != Vector2.ZERO:
 		_facing_direction = input_dir
+		_update_aim_line()  # 방향 변경 시 aim 표시 업데이트
 	
 	# 속도 계산 (부스터 고려)
 	var target_speed := _data.max_speed
@@ -254,18 +296,19 @@ func _handle_input() -> void:
 	elif Input.is_action_just_released("booster"):
 		stop_boost()
 	
-	# 공격 입력
+	# 공격 입력 (일반화)
 	if Input.is_action_just_pressed("attack_type1"):
-		_execute_attack(_data.attack_type1)
+		execute_attack_by_index(0)
 	if Input.is_action_just_pressed("attack_type2"):
-		_execute_attack(_data.attack_type2)
+		execute_attack_by_index(1)
 	if Input.is_action_just_pressed("attack_special"):
-		attack_special()
+		execute_attack_by_index(2)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Stats
 # ═══════════════════════════════════════════════════════════════════════════════
 
+@rpc("any_peer")
 func take_damage(amount: int) -> void:
 	if _is_dead:
 		return
@@ -340,12 +383,9 @@ func _die() -> void:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 func _update_cooldowns(delta: float) -> void:
-	if _melee_cooldown_timer > 0:
-		_melee_cooldown_timer -= delta
-	if _ranged_cooldown_timer > 0:
-		_ranged_cooldown_timer -= delta
-	if _special_cooldown_timer > 0:
-		_special_cooldown_timer -= delta
+	for key in _cooldowns.keys():
+		if _cooldowns[key] > 0:
+			_cooldowns[key] -= delta
 
 
 func _regen_mp(delta: float) -> void:
@@ -394,24 +434,94 @@ func _handle_booster(delta: float) -> void:
 	use_mp(int(mp_cost))
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Attack System
+# Attack System (일반화)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-func attack_melee() -> bool:
+## 인덱스로 공격 실행 (입력 핸들러용)
+func execute_attack_by_index(index: int) -> bool:
+	var attack := _data.get_attack(index)
+	if not attack:
+		return false
+	return execute_attack(attack, index)
+
+
+## 공격 실행 (일반화)
+func execute_attack(attack: CharacterData.Attack, index: int = -1) -> bool:
 	if _is_dead:
 		return false
 	
-	if _melee_cooldown_timer > 0:
+	# 쿨다운 체크
+	if index >= 0 and _cooldowns.get(index, 0) > 0:
 		return false
 	
-	_melee_cooldown_timer = _data.melee_cooldown
-	_activate_hitbox(_data.melee_range / 2.0, _data.melee_power)
-	attacked.emit(false)
+	# 비용 지불
+	if not _pay_cost(attack):
+		return false
+	
+	# 스타일별 실행
+	match attack.style:
+		CharacterData.Attack.Style.MELEE_HITBOX:
+			_execute_melee_hitbox(attack)
+		CharacterData.Attack.Style.PROJECTILE:
+			_execute_projectile(attack)
+		CharacterData.Attack.Style.AOE_CENTER:
+			_execute_aoe_center(attack)
+	
+	# 쿨다운 설정
+	if index >= 0:
+		_cooldowns[index] = attack.cooldown
+	
+	attacked.emit(attack)
 	return true
 
 
-func _activate_hitbox(radius: float, damage: int) -> void:
+## 비용 지불
+func _pay_cost(attack: CharacterData.Attack) -> bool:
+	match attack.cost_type:
+		CharacterData.Attack.CostType.MP:
+			return use_mp(attack.cost_amount)
+		CharacterData.Attack.CostType.BP:
+			return use_bp(attack.cost_amount)
+		_:
+			return true  # NONE
+
+
+## 근접 히트박스 공격 실행
+func _execute_melee_hitbox(attack: CharacterData.Attack) -> void:
+	_activate_hitbox(attack.range / 2.0, attack.damage, attack.hitbox_duration)
+
+
+## 투사체 공격 실행
+func _execute_projectile(attack: CharacterData.Attack) -> void:
+	var projectile := Projectile.new()
+	projectile.init(
+		_facing_direction,
+		attack.projectile_speed,
+		attack.damage,
+		self,
+		_data.projectile_range,
+		_data.element,
+		attack.cost_type == CharacterData.Attack.CostType.MP  # MP 사용 = 특수 공격
+	)
+	projectile.position = position
+	
+	var parent := get_parent()
+	if parent:
+		parent.add_child(projectile)
+	else:
+		get_tree().current_scene.add_child(projectile)
+
+
+## AOE 광역 공격 실행
+func _execute_aoe_center(attack: CharacterData.Attack) -> void:
+	_activate_aoe_hitbox(attack.range, attack.damage)
+	_show_special_effect(attack.range)
+
+
+## 히트박스 활성화
+func _activate_hitbox(radius: float, damage: int, duration: float = 0.2) -> void:
 	_hitbox_damage = damage
+	_hitbox_duration = duration
 	
 	# 히트박스가 없으면 생성
 	if not _melee_hitbox:
@@ -446,7 +556,7 @@ func _activate_hitbox(radius: float, damage: int) -> void:
 	_melee_hitbox.monitoring = true
 	_melee_hitbox.visible = true
 	_melee_hitbox_active = true
-	_melee_hitbox_timer = _data.melee_hitbox_duration
+	_melee_hitbox_timer = _hitbox_duration
 
 
 func _handle_melee_hitbox(delta: float) -> void:
@@ -471,86 +581,14 @@ func _on_melee_hitbox_entered(body: Node2D) -> void:
 	
 	if body is Character:
 		var character := body as Character
-		character.take_damage(_hitbox_damage)
+		# 네트워크 플레이어면 RPC로 데미지 전달
+		if character._is_network_controlled:
+			character.rpc("take_damage", _hitbox_damage)
+		else:
+			character.take_damage(_hitbox_damage)
 
 
-func attack_ranged() -> bool:
-	if _is_dead:
-		return false
-	
-	if _ranged_cooldown_timer > 0:
-		return false
-	
-	if not use_bp(_data.ranged_bp_cost):
-		return false
-	
-	_ranged_cooldown_timer = _data.ranged_cooldown
-	_spawn_projectile()
-	attacked.emit(true)
-	return true
-
-
-func _spawn_projectile() -> void:
-	var projectile := Projectile.new()
-	projectile.init(
-		_facing_direction,
-		_data.projectile_speed,
-		_data.ranged_power,
-		self,
-		_data.projectile_range,
-		_data.element
-	)
-	projectile.position = position
-	
-	# 씬에 추가 (부모 씬 또는 최상위 노드)
-	var parent := get_parent()
-	if parent:
-		parent.add_child(projectile)
-	else:
-		get_tree().current_scene.add_child(projectile)
-
-
-func can_attack_melee() -> bool:
-	return not _is_dead and _melee_cooldown_timer <= 0
-
-
-func can_attack_ranged() -> bool:
-	return not _is_dead and _ranged_cooldown_timer <= 0 and _current_bp >= _data.ranged_bp_cost
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Special Attack System (필살기)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-func attack_special() -> bool:
-	if _is_dead:
-		return false
-	
-	if _special_cooldown_timer > 0:
-		return false
-	
-	if not use_mp(_data.special_mp_cost):
-		return false
-	
-	_special_cooldown_timer = _data.special_cooldown
-	
-	# 필살기 타입에 따른 처리
-	match _data.special_type:
-		CharacterData.SpecialType.MELEE_AOE:
-			_execute_melee_aoe()
-		CharacterData.SpecialType.RANGED_MAGIC:
-			_execute_ranged_magic()
-	
-	special_attacked.emit()
-	return true
-
-
-func _execute_melee_aoe() -> void:
-	# 근접 광역기: Area2D 히트박스 사용
-	_activate_aoe_hitbox(_data.special_range, _data.special_power)
-	_show_special_effect(_data.special_range)
-
-
+## AOE 히트박스 활성화
 func _activate_aoe_hitbox(radius: float, damage: int) -> void:
 	_hitbox_damage = damage
 	
@@ -568,34 +606,18 @@ func _activate_aoe_hitbox(radius: float, damage: int) -> void:
 	# 현재 겹치는 모든 적에게 데미지
 	for body in aoe_hitbox.get_overlapping_bodies():
 		if body != self and body is Character:
-			body.take_damage(_hitbox_damage)
+			var character := body as Character
+			# 네트워크 플레이어면 RPC로 데미지 전달
+			if character._is_network_controlled:
+				character.rpc("take_damage", _hitbox_damage)
+			else:
+				character.take_damage(_hitbox_damage)
 	
 	# 즉시 제거
 	aoe_hitbox.queue_free()
 
 
-func _execute_ranged_magic() -> void:
-	# 원거리 마법: 강력한 투사체 발사
-	var projectile := Projectile.new()
-	projectile.init(
-		_facing_direction,
-		_data.projectile_speed * 1.2,  # 더 빠른 속도
-		_data.special_power,
-		self,
-		_data.special_range,
-		_data.element,
-		true  # is_special 플래그
-	)
-	projectile.position = position
-	
-	# 씬에 추가
-	var parent := get_parent()
-	if parent:
-		parent.add_child(projectile)
-	else:
-		get_tree().current_scene.add_child(projectile)
-
-
+## 특수 효과 표시
 func _show_special_effect(radius: float) -> void:
 	# 임시 시각 효과: 원형 히트박스 표시
 	var effect := ColorRect.new()
@@ -609,18 +631,26 @@ func _show_special_effect(radius: float) -> void:
 	get_tree().create_timer(0.3).timeout.connect(effect.queue_free)
 
 
-func can_attack_special() -> bool:
-	return not _is_dead and _special_cooldown_timer <= 0 and _current_mp >= _data.special_mp_cost
-
-
-func _execute_attack(attack_type: CharacterData.AttackType) -> void:
-	match attack_type:
-		CharacterData.AttackType.MELEE:
-			attack_melee()
-		CharacterData.AttackType.RANGED:
-			attack_ranged()
-		CharacterData.AttackType.NONE:
-			pass  # 공격 없음
+## 공격 가능 여부 확인 (인덱스)
+func can_attack(index: int) -> bool:
+	if _is_dead:
+		return false
+	
+	var attack := _data.get_attack(index)
+	if not attack:
+		return false
+	
+	if _cooldowns.get(index, 0) > 0:
+		return false
+	
+	# 비용 확인
+	match attack.cost_type:
+		CharacterData.Attack.CostType.MP:
+			return _current_mp >= attack.cost_amount
+		CharacterData.Attack.CostType.BP:
+			return _current_bp >= attack.cost_amount
+		_:
+			return true
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Network Sync Methods
@@ -660,6 +690,29 @@ func sync_remote_position(_pos: Vector2, _vel: Vector2, _facing: Vector2, _hp: i
 		_facing_direction = _facing
 		_current_hp = _hp
 		_update_hp_bar()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Helper Methods
+# ═══════════════════════════════════════════════════════════════════════════════
+
+func _find_virtual_joystick() -> VirtualJoystick:
+	# 씬 트리에서 VirtualJoystick 찾기
+	var tree := get_tree()
+	if not tree:
+		return null
+	
+	# BattleHUD -> Control -> JoystickControl -> Virtual Joystick 경로
+	var root := tree.root
+	if not root:
+		return null
+	
+	# 모든 노드에서 VirtualJoystick 타입 찾기
+	var nodes := root.find_children("*", "VirtualJoystick", true, false)
+	if nodes.size() > 0:
+		return nodes[0]
+	
+	return null
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -9,7 +9,7 @@ var _login_screen: LoginScreen
 var _original_host: String
 var _original_port: int
 var _transition_received: bool = false
-var _transition_screen: Control = null
+var _transition_screen: Node = null
 
 func before_each() -> void:
 	_original_host = Online.nakama_host

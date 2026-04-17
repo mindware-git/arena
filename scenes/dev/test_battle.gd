@@ -79,7 +79,8 @@ func _start_test_battle() -> void:
 	_battle.character_died.connect(_on_character_died)
 	
 	# 배틀 시작 (테스트 데이터로)
-	_battle.start_battle(_player_ids[_current_player_index], _enemy_ids)
+	# enemies가 비어있으면 자동으로 enemy_slime 스폰
+	_battle.start_battle(_player_ids[_current_player_index])
 	
 	_log("=== 배틀 시작 ===")
 

@@ -2,8 +2,15 @@
 
 ## 현재 작업 포커스
 
-### 배틀 씬 분리 작업
-현재 `scenes/prd/battle.tscn`과 `scenes/dev/test_battle.tscn`을 분리하는 작업을 진행 중입니다.
+### AttackData 리팩토링 완료
+`AttackType`과 `SpecialType` enum을 제거하고 모든 공격을 `attacks: Array[Attack]`로 통합했습니다.
+
+#### 변경 사항
+- `CharacterRegistry.gd`: 3개 캐릭터(gyro, shamu, enemy_slime)를 새로운 `attacks` 방식으로 변환
+- 각 캐릭터의 공격이 `attacks[0]`, `attacks[1]`, `attacks[2]`로 구성
+  - `[0]` = 버튼1 (기본 공격)
+  - `[1]` = 버튼2 (보조 공격, BP 사용)
+  - `[2]` = 필살기 (MP 사용)
 
 #### 씬 구조
 ```
@@ -33,6 +40,11 @@ scenes/
 
 ## 최근 변경사항
 
+### 2026-04-17
+- AttackData 리팩토링 완료
+- `CharacterRegistry.gd` 새로운 attacks 방식으로 변환
+- 66개 테스트 모두 통과
+
 ### 2026-04-15
 - `scenes/prd/battle.tscn` 및 `battle.gd` 생성
 - 배틀 씬 분리 구조 설계
@@ -50,29 +62,14 @@ scenes/
 
 ## 다음 단계
 
-### 1. battle.gd 구현
-```gdscript
-# 배틀 로직이 들어갈 내용
-- 플레이어 스폰
-- 적 캐릭터 스폰
-- 전투 영역 설정
-- 승패 조건 체크
-- 네트워크 동기화 처리
-```
+### 1. 캐릭터 공격 테스트
+- 각 캐릭터의 공격이 올바르게 작동하는지 테스트
+- 근접 공격 (MELEE_HITBOX)
+- 원거리 공격 (PROJECTILE)
+- 광역 공격 (AOE_CENTER)
 
-### 2. test_battle.gd 수정
-```gdscript
-# 테스트 데이터 설정만 담당
-- 플레이어 캐릭터 ID 설정
-- 적 캐릭터 ID 설정
-- battle.tscn 인스턴스화
-- 테스트용 UI 유지
-```
-
-### 3. 테스트 작성
-- 배틀 시작/종료 테스트
-- 캐릭터 스폰 테스트
-- 승패 조건 테스트
+### 2. UI 분리 (선택사항)
+- HP 바, Aim 표시를 BattleScreen으로 이동
 
 ## 중요한 패턴 및 선호사항
 

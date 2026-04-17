@@ -129,7 +129,11 @@ func _on_body_entered(body: Node2D) -> void:
 	# Character에 충돌 시 데미지
 	if body is Character:
 		var character := body as Character
-		character.take_damage(_damage)
+		# 네트워크 플레이어면 RPC로 데미지 전달
+		if character.is_network_controlled():
+			character.rpc("take_damage", _damage)
+		else:
+			character.take_damage(_damage)
 		hit.emit(body)
 		queue_free()
 

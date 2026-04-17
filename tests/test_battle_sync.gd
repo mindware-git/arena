@@ -579,3 +579,156 @@ func _send_character_selection_to_b(char_id: String, is_ready: bool) -> void:
 	if target_presence:
 		_socket_a.send_match_state_raw_async(_match_id, CHAR_SELECT_OP_CODE, select_data, [target_presence])
 		gut.p("Sent character selection: char_id=%s, ready=%s" % [char_id, is_ready])
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Test: BattleScreen Network Player Spawn
+# BattleScreen의 allies/enemies 파라미터로 캐릭터 스폰 테스트
+# ═══════════════════════════════════════════════════════════════════════════════
+
+func test_battle_screen_network_player_spawn() -> void:
+	# BattleScreen 생성
+	var battle := BattleScreen.new()
+	add_child(battle)
+	
+	# _ready() 대기
+	await get_tree().process_frame
+	
+	# 내 캐릭터 ID
+	var my_char_id := "gyro"
+	
+	# 상대방 정보 (네트워크 플레이어)
+	var enemy_peer_id := 12345
+	var enemy_char_id := "shamu"
+	var enemies: Array[Dictionary] = [
+		{"peer_id": enemy_peer_id, "character_id": enemy_char_id}
+	]
+	
+	# 배틀 시작
+	battle.start_battle(my_char_id, [], enemies)
+	
+	# 검증: 내 플레이어 스폰 확인
+	assert_not_null(battle.player, "Player should be spawned")
+	assert_true(battle.player.is_controllable, "Player should be controllable")
+	assert_false(battle.player.is_network_controlled(), "Player should not be network controlled")
+	assert_eq(battle.player.character_data.id, my_char_id, "Player character ID should match")
+	
+	# 검증: 적군(네트워크 플레이어) 스폰 확인
+	assert_true(battle._remote_players.has(enemy_peer_id), "Remote player should be registered")
+	var enemy_char: Character = battle._remote_players.get(enemy_peer_id)
+	assert_not_null(enemy_char, "Enemy character should exist")
+	assert_false(enemy_char.is_controllable, "Enemy should not be controllable")
+	assert_true(enemy_char.is_network_controlled(), "Enemy should be network controlled")
+	assert_eq(enemy_char.character_data.id, enemy_char_id, "Enemy character ID should match")
+	
+	gut.p("BattleScreen network player spawn test passed")
+	
+	# 정리
+	battle.queue_free()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Test: BattleScreen Multiple Players
+# 다중 플레이어(아군 + 적군) 스폰 테스트
+# ═══════════════════════════════════════════════════════════════════════════════
+
+func test_battle_screen_multiple_players() -> void:
+	var battle := BattleScreen.new()
+	add_child(battle)
+	
+	await get_tree().process_frame
+	
+	# 내 캐릭터
+	var my_char_id := "gyro"
+	
+	# 아군 (네트워크 플레이어)
+	var ally_peer_id := 111
+	var ally_char_id := "shamu"
+	var allies: Array[Dictionary] = [
+		{"peer_id": ally_peer_id, "character_id": ally_char_id}
+	]
+	
+	# 적군 (네트워크 플레이어)
+	var enemy_peer_id := 222
+	var enemy_char_id := "gyro"
+	var enemies: Array[Dictionary] = [
+		{"peer_id": enemy_peer_id, "character_id": enemy_char_id}
+	]
+	
+	# 배틀 시작
+	battle.start_battle(my_char_id, allies, enemies)
+	
+	# 검증: 내 플레이어
+	assert_not_null(battle.player, "Player should be spawned")
+	assert_true(battle.player.is_controllable, "Player should be controllable")
+	
+	# 검증: 아군
+	assert_true(battle._remote_players.has(ally_peer_id), "Ally should be registered")
+	var ally_char: Character = battle._remote_players.get(ally_peer_id)
+	assert_not_null(ally_char, "Ally character should exist")
+	assert_true(ally_char.is_network_controlled(), "Ally should be network controlled")
+	
+	# 검증: 적군
+	assert_true(battle._remote_players.has(enemy_peer_id), "Enemy should be registered")
+	var enemy_char: Character = battle._remote_players.get(enemy_peer_id)
+	assert_not_null(enemy_char, "Enemy character should exist")
+	assert_true(enemy_char.is_network_controlled(), "Enemy should be network controlled")
+	
+	# 검증: 총 스폰된 네트워크 플레이어 수
+	assert_eq(battle._remote_players.size(), 2, "Should have 2 remote players")
+	
+	gut.p("BattleScreen multiple players test passed")
+	
+	battle.queue_free()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Test: Character RPC Sync
+# Character의 sync_remote_position RPC 동작 테스트
+# ═══════════════════════════════════════════════════════════════════════════════
+
+func test_character_rpc_sync() -> void:
+	# 로컬 플레이어 생성
+	var registry := CharacterRegistry.new()
+	var data := registry.get_character("gyro")
+	
+	var local_char := Character.new()
+	local_char.is_controllable = true
+	local_char.init(data)
+	add_child(local_char)
+	
+	# 네트워크 플레이어 생성
+	var remote_char := Character.new()
+	remote_char.is_controllable = false
+	remote_char.init(data)
+	remote_char.set_network_controlled(true)
+	add_child(remote_char)
+	
+	# 검증: 로컬 플레이어 상태
+	assert_true(local_char.is_controllable, "Local should be controllable")
+	assert_false(local_char.is_network_controlled(), "Local should not be network controlled")
+	
+	# 검증: 네트워크 플레이어 상태
+	assert_false(remote_char.is_controllable, "Remote should not be controllable")
+	assert_true(remote_char.is_network_controlled(), "Remote should be network controlled")
+	
+	# RPC 동기화 시뮬레이션 (직접 호출)
+	var test_pos := Vector2(150.0, 250.0)
+	var test_vel := Vector2(10.0, -5.0)
+	var test_facing := Vector2.LEFT
+	var test_hp := 80
+	
+	# sync_remote_position은 @rpc 데코레이터가 있지만 직접 호출 가능
+	remote_char.sync_remote_position(test_pos, test_vel, test_facing, test_hp)
+	
+	# 검증: 위치 동기화
+	assert_almost_eq(remote_char.position.x, test_pos.x, 0.1, "Position X should be synced")
+	assert_almost_eq(remote_char.position.y, test_pos.y, 0.1, "Position Y should be synced")
+	assert_almost_eq(remote_char.facing_direction.x, test_facing.x, 0.1, "Facing X should be synced")
+	assert_almost_eq(remote_char.facing_direction.y, test_facing.y, 0.1, "Facing Y should be synced")
+	assert_eq(remote_char.current_hp, test_hp, "HP should be synced")
+	
+	gut.p("Character RPC sync test passed")
+	
+	local_char.queue_free()
+	remote_char.queue_free()

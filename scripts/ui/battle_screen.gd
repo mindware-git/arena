@@ -47,6 +47,9 @@ var _kill_count: int = 0
 var _is_multiplayer: bool = false
 var _remote_players: Dictionary = {}  # peer_id -> Character
 
+# 대기 중인 배틀 데이터 (_ready에서 처리)
+var _pending_battle_data: Dictionary = {}
+
 # UI
 var _battle_hud: CanvasLayer
 var _hp_bar: ProgressBar
@@ -79,6 +82,15 @@ var battle_time: float:
 func _ready() -> void:
 	_registry = CharacterRegistry.new()
 	_create_battle_ui()
+	
+	# 대기 중인 배틀 데이터가 있으면 시작
+	if not _pending_battle_data.is_empty():
+		start_battle(
+			_pending_battle_data.get("my_character_id", ""),
+			_pending_battle_data.get("allies", []),
+			_pending_battle_data.get("enemies", [])
+		)
+		_pending_battle_data.clear()
 
 
 func _process(delta: float) -> void:
@@ -270,23 +282,49 @@ func _update_battle_ui() -> void:
 # Battle Control
 # ═══════════════════════════════════════════════════════════════════════════════
 
-func start_battle(player_character_id: String, enemy_character_ids: Array[String] = []) -> void:
+func start_battle(
+	my_character_id: String,
+	allies: Array[Dictionary] = [],   # [{"peer_id": int, "character_id": String}, ...]
+	enemies: Array[Dictionary] = []   # [{"peer_id": int, "character_id": String}, ...]
+) -> void:
+	#print("[DEBUG] BattleScreen.start_battle called: my_char=%s, allies=%s, enemies=%s" % [my_character_id, allies, enemies])
+	
+	# _ready()보다 먼저 호출될 수 있으므로 null 체크
+	if not _registry:
+		_registry = CharacterRegistry.new()
+	
 	_clear_battle()
 	_kill_count = 0
 	
-	# 플레이어 스폰
-	spawn_player(player_character_id)
+	# 내 플레이어 스폰 (로컬 제어)
+	#print("[DEBUG] Spawning local player: %s" % my_character_id)
+	spawn_player(my_character_id)
 	
-	# 적 스폰
-	if enemy_character_ids.is_empty():
-		# 기본 적 스폰
+	# 아군 스폰 (네트워크 제어)
+	for i in range(allies.size()):
+		var ally := allies[i]
+		var peer_id: int = ally.get("peer_id", 0)
+		var char_id: String = ally.get("character_id", "")
+		if peer_id > 0 and not char_id.is_empty():
+			var pos := PLAYER_SPAWN_POSITION + Vector2(100 * (i + 1), 0)
+			setup_network_player(peer_id, char_id, false, pos)
+	
+	# 적군 스폰 (네트워크 제어 또는 기본 AI 적)
+	if enemies.is_empty():
+		# 기본 AI 적 스폰
+		#print("[DEBUG] No enemies provided, spawning AI enemies")
 		for i in range(ENEMY_SPAWN_POSITIONS.size()):
 			spawn_enemy("enemy_slime", ENEMY_SPAWN_POSITIONS[i])
 	else:
-		# 지정된 적 스폰
-		for i in range(enemy_character_ids.size()):
-			var pos := ENEMY_SPAWN_POSITIONS[i % ENEMY_SPAWN_POSITIONS.size()]
-			spawn_enemy(enemy_character_ids[i], pos)
+		# 네트워크 플레이어 적 스폰
+		#print("[DEBUG] Spawning network player enemies: %s" % enemies)
+		for i in range(enemies.size()):
+			var enemy := enemies[i]
+			var peer_id: int = enemy.get("peer_id", 0)
+			var char_id: String = enemy.get("character_id", "")
+			if peer_id > 0 and not char_id.is_empty():
+				var pos := ENEMY_SPAWN_POSITIONS[i % ENEMY_SPAWN_POSITIONS.size()]
+				setup_network_player(peer_id, char_id, false, pos)
 	
 	_is_battle_active = true
 	_battle_time = 0.0
@@ -333,13 +371,44 @@ func spawn_player(character_id: String) -> Character:
 	_player.init(data)
 	_player.position = PLAYER_SPAWN_POSITION
 	
+	# 노드 이름을 내 peer_id로 설정 (RPC 경로 일치)
+	# OnlineMatch.players의 키 중 하나가 내 peer_id
+	var my_peer_id := _get_my_peer_id()
+	_player.name = "Character_%d" % my_peer_id
+	
+	# 네트워크 권한 설정 (내 캐릭터는 내가 제어)
+	_player.set_multiplayer_authority(my_peer_id)
+	
+	#print("[DEBUG] Local player name set: %s, peer_id=%s, authority=%s" % [_player.name, my_peer_id, _player.get_multiplayer_authority()])
+	
 	# 시그널 연결
 	_player.died.connect(_on_player_died)
 	
-	add_child(_player)
+	# force_readable_name=true로 RPC 경로 일치 보장
+	add_child(_player, true)
 	player_spawned.emit(_player)
 	
 	return _player
+
+
+func set_battle_data(my_character_id: String, allies: Array[Dictionary] = [], enemies: Array[Dictionary] = []) -> void:
+	"""배틀 데이터 설정. _ready()에서 start_battle()이 호출됨."""
+	_pending_battle_data = {
+		"my_character_id": my_character_id,
+		"allies": allies,
+		"enemies": enemies
+	}
+
+
+func _get_my_peer_id() -> int:
+	# SceneTree의 multiplayer 사용
+	var mp = multiplayer
+	if mp and mp.has_multiplayer_peer():
+		return mp.get_unique_id()
+	
+	# 최종 Fallback
+	#print("[DEBUG] Warning: No multiplayer peer available, returning 1")
+	return 1
 
 
 func spawn_enemy(character_id: String, position: Vector2 = Vector2.ZERO) -> Character:
@@ -433,21 +502,36 @@ func _remove_enemy(enemy: Character) -> void:
 # Network Sync (for multiplayer)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-func setup_network_player(peer_id: int, character_id: String, is_local: bool) -> Character:
+func setup_network_player(peer_id: int, character_id: String, is_local: bool, spawn_pos: Vector2 = Vector2.ZERO) -> Character:
+	#print("[DEBUG] setup_network_player: peer_id=%s, char_id=%s, is_local=%s, pos=%s" % [peer_id, character_id, is_local, spawn_pos])
 	var data := _registry.get_character(character_id)
 	if not data:
+		push_error("Network character not found: " + character_id)
 		return null
 	
 	var character := Character.new()
 	character.is_controllable = is_local  # init() 전에 설정
 	character.init(data)
-	character.position = PLAYER_SPAWN_POSITION
+	character.position = spawn_pos if spawn_pos != Vector2.ZERO else PLAYER_SPAWN_POSITION
 	character.set_network_controlled(not is_local)
 	
-	add_child(character)
+	# 노드 이름을 peer_id로 설정 (RPC 경로 일치)
+	character.name = "Character_%d" % peer_id
+	
+	# 네트워크 권한 설정 (Godot 4: set_multiplayer_authority)
+	# 해당 peer가 이 노드의 RPC를 제어
+	character.set_multiplayer_authority(peer_id)
+	
+	#print("[DEBUG] Network player name set: %s, is_network_controlled=%s, authority=%s" % [character.name, character.is_network_controlled(), character.get_multiplayer_authority()])
+	
+	# force_readable_name=true로 RPC 경로 일치 보장
+	add_child(character, true)
 	
 	if is_local:
 		_player = character
 		player_spawned.emit(character)
+	else:
+		_remote_players[peer_id] = character
+		#print("[DEBUG] Added to _remote_players: peer_id=%s, total=%s" % [peer_id, _remote_players.keys()])
 	
 	return character

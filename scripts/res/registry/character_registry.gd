@@ -40,16 +40,38 @@ func _register_gyro() -> void:
 	data.acceleration = 12.0
 	data.is_flying = false
 	
-	# 공격 타입 (자이로: 근접 위주)
-	data.attack_type1 = CharacterData.AttackType.MELEE
-	data.attack_type2 = CharacterData.AttackType.RANGED
+	# 공격 목록
+	# [0] 버튼1: 근접 공격
+	var attack1 := CharacterData.Attack.new(
+		CharacterData.Attack.Style.MELEE_HITBOX,
+		15,    # damage
+		0.5,   # cooldown
+		60.0   # range
+	)
+	data.attacks.append(attack1.to_dict())
 	
-	# 필살기 (근접 광역기)
-	data.special_type = CharacterData.SpecialType.MELEE_AOE
-	data.special_power = 50
-	data.special_cooldown = 5.0
-	data.special_mp_cost = 30
-	data.special_range = 150.0
+	# [1] 버튼2: 원거리 공격 (BP 사용)
+	var attack2 := CharacterData.Attack.new(
+		CharacterData.Attack.Style.PROJECTILE,
+		12,    # damage
+		0.8,   # cooldown
+		500.0, # range
+		CharacterData.Attack.CostType.BP,
+		5      # cost_amount
+	)
+	attack2.projectile_speed = 450.0
+	data.attacks.append(attack2.to_dict())
+	
+	# [2] 필살기: 근접 광역 (MP 사용)
+	var special := CharacterData.Attack.new(
+		CharacterData.Attack.Style.AOE_CENTER,
+		50,    # damage
+		5.0,   # cooldown
+		150.0, # range
+		CharacterData.Attack.CostType.MP,
+		30     # cost_amount
+	)
+	data.attacks.append(special.to_dict())
 	
 	_characters[data.id] = data
 
@@ -76,16 +98,78 @@ func _register_shamu() -> void:
 	data.acceleration = 15.0
 	data.is_flying = true
 	
-	# 공격 타입 (샤무: 마법사 - 둘 다 원거리)
-	data.attack_type1 = CharacterData.AttackType.RANGED
-	data.attack_type2 = CharacterData.AttackType.RANGED
+	# 공격 목록
+	# [0] 버튼1: 원거리 공격
+	var attack1 := CharacterData.Attack.new(
+		CharacterData.Attack.Style.PROJECTILE,
+		15,    # damage
+		0.6,   # cooldown
+		500.0  # range
+	)
+	attack1.projectile_speed = 500.0
+	data.attacks.append(attack1.to_dict())
 	
-	# 필살기 (원거리 마법)
-	data.special_type = CharacterData.SpecialType.RANGED_MAGIC
-	data.special_power = 40
-	data.special_cooldown = 4.0
-	data.special_mp_cost = 35
-	data.special_range = 700.0
+	# [1] 버튼2: 원거리 공격 (BP 사용)
+	var attack2 := CharacterData.Attack.new(
+		CharacterData.Attack.Style.PROJECTILE,
+		20,    # damage
+		1.0,   # cooldown
+		600.0, # range
+		CharacterData.Attack.CostType.BP,
+		8      # cost_amount
+	)
+	attack2.projectile_speed = 550.0
+	data.attacks.append(attack2.to_dict())
+	
+	# [2] 필살기: 특수 마법 투사체 (MP 사용)
+	var special := CharacterData.Attack.new(
+		CharacterData.Attack.Style.PROJECTILE,
+		40,    # damage
+		4.0,   # cooldown
+		700.0, # range
+		CharacterData.Attack.CostType.MP,
+		35     # cost_amount
+	)
+	special.projectile_speed = 600.0
+	data.attacks.append(special.to_dict())
+	
+	_characters[data.id] = data
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 적 캐릭터 (Enemy Slime)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+func _register_enemy_slime() -> void:
+	var data := CharacterData.new()
+	data.id = "enemy_slime"
+	data.display_name = "슬라임"
+	data.description = "기본 적"
+	data.element = GameManager.ElementType.EARTH
+	
+	# 능력치 (약한 적)
+	data.max_hp = 30
+	data.max_mp = 0
+	data.max_bp = 0
+	data.melee_power = 5
+	data.ranged_power = 0
+	data.max_speed = 80.0
+	data.rotation_speed = 3.0
+	data.acceleration = 5.0
+	data.is_flying = false
+	
+	# 공격 목록
+	# [0] 버튼1: 근접 공격만
+	var attack1 := CharacterData.Attack.new(
+		CharacterData.Attack.Style.MELEE_HITBOX,
+		5,     # damage
+		1.0,   # cooldown
+		40.0   # range
+	)
+	data.attacks.append(attack1.to_dict())
+	
+	# [1] 버튼2: 없음
+	# [2] 필살기: 없음
 	
 	_characters[data.id] = data
 
@@ -112,35 +196,6 @@ func get_all_ids() -> Array[String]:
 	for key in _characters.keys():
 		result.append(key)
 	return result
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# 적 캐릭터 (Enemy Slime)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-func _register_enemy_slime() -> void:
-	var data := CharacterData.new()
-	data.id = "enemy_slime"
-	data.display_name = "슬라임"
-	data.description = "기본 적"
-	data.element = GameManager.ElementType.EARTH
-	
-	# 능력치 (약한 적)
-	data.max_hp = 30
-	data.max_mp = 0
-	data.max_bp = 0
-	data.melee_power = 5
-	data.ranged_power = 0
-	data.max_speed = 80.0
-	data.rotation_speed = 3.0
-	data.acceleration = 5.0
-	data.is_flying = false
-	
-	# 공격 타입 (슬라임: 근접만)
-	data.attack_type1 = CharacterData.AttackType.MELEE
-	data.attack_type2 = CharacterData.AttackType.NONE
-	
-	_characters[data.id] = data
 
 
 func has_character(id: String) -> bool:

@@ -6,7 +6,7 @@ extends GutTest
 # ═══════════════════════════════════════════════════════════════════════════════
 
 var _main_scene: Node2D
-var _current_screen: Control
+var _current_screen: Node
 
 
 func before_each() -> void:
@@ -26,12 +26,45 @@ func test_splash_to_login_flow() -> void:
 	_main_scene.add_child(splash)
 	_current_screen = splash
 	
-	# 초기 상태 확인
-	var title_label = splash.get_node("Label")
+	# _ready() 후 UI가 생성될 때까지 대기
+	await get_tree().process_frame
+	
+	# CanvasLayer 찾기
+	var canvas_layer: CanvasLayer = null
+	for child in splash.get_children():
+		if child is CanvasLayer:
+			canvas_layer = child
+			break
+	
+	assert_not_null(canvas_layer, "Should have CanvasLayer")
+	
+	# UIContainer 찾기
+	var ui_container: Control = null
+	for child in canvas_layer.get_children():
+		if child is Control and child.name == "UIContainer":
+			ui_container = child
+			break
+	
+	assert_not_null(ui_container, "Should have UIContainer")
+	
+	# Label 찾기
+	var title_label: Label = null
+	for child in ui_container.get_children():
+		if child is Label and child.name == "Label":
+			title_label = child
+			break
+	
+	assert_not_null(title_label, "Should have title label")
 	assert_eq(title_label.text, "ARENA", "Should show ARENA title")
 	
-	# 터치 시작 버튼 클릭
-	var start_btn = splash.get_node("Button")
+	# Button 찾기
+	var start_btn: Button = null
+	for child in ui_container.get_children():
+		if child is Button and child.name == "Button":
+			start_btn = child
+			break
+	
+	assert_not_null(start_btn, "Should have start button")
 	assert_eq(start_btn.text, "TOUCH TO START", "Should have start button")
 	
 	# 시그널 연결
