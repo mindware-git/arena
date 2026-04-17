@@ -47,10 +47,8 @@ GameManager="*res://scripts/autoload/GameManager.gd"
 ```
 arena/
 ├── scenes/
-│   ├── prd/                    # 프로덕션 씬
-│   │   └── battle.tscn         # 실제 배틀 씬
 │   ├── dev/                    # 개발/테스트 씬
-│   │   ├── test_battle.tscn    # 테스트용 배틀
+│   │   ├── test_battle.tscn    # 테스트용 배틀 (BattleScreen 인스턴스화)
 │   │   └── test_character.tscn # 캐릭터 테스트
 │   └── ui/                     # UI 씬
 │       ├── battle_hud.tscn     # 배틀 HUD

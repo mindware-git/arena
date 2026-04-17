@@ -54,15 +54,15 @@
 ## 진행 중인 작업
 
 ### 배틀 씬 분리 ✅ 완료
-- [x] `scenes/prd/battle.tscn` 생성
-- [x] `scenes/prd/battle.gd` 구현
+- [x] `scripts/ui/battle_screen.gd` 구조 확립
+- [x] 배틀 로직 구현
   - [x] 플레이어 스폰 함수
   - [x] 적 캐릭터 스폰 함수
   - [x] 배틀 시작/종료 제어
   - [x] 승패 조건 체크
   - [x] 네트워크 플레이어 설정
 - [x] `scenes/dev/test_battle.gd` 리팩토링
-  - [x] battle.tscn 인스턴스화
+  - [x] `BattleScreen` 분리 인스턴스화
   - [x] 테스트 데이터 설정 분리
   - [x] 디버그 UI 유지
 - [x] `tests/test_battle.gd` 작성
@@ -111,10 +111,10 @@
 
 ## 결정사항 변화
 
-### 2026-04-15
-- 배틀 씬 분리 결정
-  - prd/battle.tscn: 실제 게임용
-  - dev/test_battle.tscn: 테스트용
+### 2026-04-15 ~ 17
+- 배틀 씬 구조 및 분리 결정 수정
+  - `scripts/ui/battle_screen.gd`: 실제 게임용 코어 배틀 씬
+  - `scenes/dev/test_battle.tscn`: 개발/테스트용 랩퍼(wrapper) 씬으로 활용해 의존성 분리
 - Code-First 레지스트리 방식 채택
 - NakamaMultiplayerBridge 기반 RPC 방식 채택
 

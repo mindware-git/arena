@@ -14,18 +14,17 @@
 
 #### 씬 구조
 ```
+scripts/ui/
+└── battle_screen.gd        # 실제 배틀 로직 및 상태 관리
+
 scenes/
-├── prd/                    # 프로덕션용 씬
-│   ├── battle.tscn         # 실제 배틀 씬 (로직만)
-│   └── battle.gd           # 배틀 로직
-│
 └── dev/                    # 개발/테스트용 씬
     ├── test_battle.tscn    # 테스트용 배틀 씬
-    └── test_battle.gd      # 테스트 데이터 설정
+    └── test_battle.gd      # 테스트 데이터 설정 및 BattleScreen 인스턴스화
 ```
 
 #### 역할 분담
-- **`battle.tscn` (prd)**: 실제 게임에서 사용될 배틀 씬
+- **`BattleScreen` (`scripts/ui/battle_screen.gd`)**: 실제 게임에서 사용될 배틀 씬
   - 배틀 로직 처리
   - 캐릭터 스폰/관리
   - 승패 판정
@@ -33,7 +32,7 @@ scenes/
 
 - **`test_battle.tscn` (dev)**: 개발 및 테스트용
   - 테스트할 캐릭터 데이터 설정
-  - `battle.tscn`을 인스턴스화하여 실행
+  - `BattleScreen`을 인스턴스화하여 실행
   - 디버그 UI (HP, MP, BP 표시)
   - 전투 로그
   - 테스트용 버튼 (캐릭터 전환, 리셋, 적 스폰)
@@ -45,9 +44,9 @@ scenes/
 - `CharacterRegistry.gd` 새로운 attacks 방식으로 변환
 - 66개 테스트 모두 통과
 
-### 2026-04-15
-- `scenes/prd/battle.tscn` 및 `battle.gd` 생성
-- 배틀 씬 분리 구조 설계
+### 2026-04-15 ~ 17
+- `scripts/ui/battle_screen.gd` 기반의 배틀 구조 정립
+- `scenes/dev/test_battle.gd`에서 `BattleScreen` 분리 인스턴스화 방식(Test/Dev 분리) 채택
 
 ### 완료된 작업
 - [x] Character 엔티티 (이동, 공격, 부스터)

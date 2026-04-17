@@ -166,6 +166,7 @@ func _create_bottom_tabs() -> void:
 	var char_btn := Button.new()
 	char_btn.text = "👤\n캐릭터"
 	char_btn.custom_minimum_size = Vector2(80, 60)
+	char_btn.pressed.connect(_on_char_pressed)
 	tabs.add_child(char_btn)
 	
 	# 랭킹
@@ -191,3 +192,11 @@ func _on_shop_pressed() -> void:
 	# ShopScreen으로 전환
 	var shop := ShopScreen.new()
 	transition_requested.emit(shop)
+
+
+func _on_char_pressed() -> void:
+	# CharacterScreen(장비 세팅)으로 전환
+	# CharacterScreen 스크립트가 로딩될 수 있도록 보장해야 합니다.
+	var ResourceType = load("res://scripts/ui/character_screen.gd")
+	var char_screen = ResourceType.new()
+	transition_requested.emit(char_screen)
