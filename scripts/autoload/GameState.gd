@@ -25,18 +25,54 @@ var is_in_match: bool = false
 var is_game_running: bool = false
 
 # Card System State
-var card_db: Dictionary = {
-	"card_1": {"name": "파워 스트라이크", "color": Color(0.8, 0.2, 0.2)},
-	"card_2": {"name": "신속의 장화", "color": Color(0.2, 0.8, 0.2)},
-	"card_3": {"name": "마나의 반지", "color": Color(0.2, 0.2, 0.8)}
+enum CardType {
+	MAIN_WEAPON = 0,
+	SUB_WEAPON = 1,
+	ARMOR = 2,
+	SHOES = 3
 }
 
-var owned_cards: Array[String] = ["card_1", "card_2", "card_3"]
+var card_type_names = {
+	CardType.MAIN_WEAPON: "주무기",
+	CardType.SUB_WEAPON: "보조무기",
+	CardType.ARMOR: "갑옷",
+	CardType.SHOES: "신발"
+}
 
-# Slot indices: 0 and 1. Values are card IDs, empty string means unequipped.
+var card_db: Dictionary = {
+	"card_1": {"name": "파워 스트라이크", "type": CardType.MAIN_WEAPON, "color": Color(0.8, 0.2, 0.2)},
+	"card_2": {"name": "단검 던지기", "type": CardType.MAIN_WEAPON, "color": Color(0.9, 0.3, 0.3)},
+	"card_3": {"name": "마나의 반지", "type": CardType.SUB_WEAPON, "color": Color(0.2, 0.2, 0.8)},
+	"card_4": {"name": "마법서", "type": CardType.SUB_WEAPON, "color": Color(0.3, 0.3, 0.9)},
+	"card_5": {"name": "가죽 갑옷", "type": CardType.ARMOR, "color": Color(0.5, 0.5, 0.5)},
+	"card_6": {"name": "판금 갑옷", "type": CardType.ARMOR, "color": Color(0.6, 0.6, 0.6)},
+	"card_7": {"name": "신속의 장화", "type": CardType.SHOES, "color": Color(0.2, 0.8, 0.2)},
+	"card_8": {"name": "강철 부츠", "type": CardType.SHOES, "color": Color(0.3, 0.7, 0.3)},
+	
+	# --- 스크롤 테스트를 위한 더미 카드들 ---
+	"card_9": {"name": "나무 몽둥이", "type": CardType.MAIN_WEAPON, "color": Color(0.6, 0.4, 0.2)},
+	"card_10": {"name": "철검", "type": CardType.MAIN_WEAPON, "color": Color(0.7, 0.7, 0.7)},
+	"card_11": {"name": "강화된 활", "type": CardType.MAIN_WEAPON, "color": Color(0.5, 0.8, 0.3)},
+	"card_12": {"name": "불꽃 지팡이", "type": CardType.MAIN_WEAPON, "color": Color(0.9, 0.4, 0.2)},
+	"card_13": {"name": "강철 방패", "type": CardType.SUB_WEAPON, "color": Color(0.6, 0.6, 0.7)},
+	"card_14": {"name": "마력의 수정", "type": CardType.SUB_WEAPON, "color": Color(0.4, 0.2, 0.9)},
+	"card_15": {"name": "미스릴 갑옷", "type": CardType.ARMOR, "color": Color(0.8, 0.9, 0.9)},
+	"card_16": {"name": "여행자의 신발", "type": CardType.SHOES, "color": Color(0.4, 0.8, 0.5)}
+}
+
+var owned_cards: Array[String] = [
+	"card_1", "card_2", "card_3", "card_4",
+	"card_5", "card_6", "card_7", "card_8",
+	"card_9", "card_10", "card_11", "card_12", 
+	"card_13", "card_14", "card_15", "card_16"
+]
+
+# Slot indices: 0(Main), 1(Sub), 2(Armor), 3(Shoes)
 var equipped_cards: Dictionary = {
-	0: "card_1",
-	1: ""
+	CardType.MAIN_WEAPON: "",
+	CardType.SUB_WEAPON: "",
+	CardType.ARMOR: "",
+	CardType.SHOES: ""
 }
 
 const SAVE_PATH = "user://game_save.json"
@@ -66,7 +102,7 @@ func load_state() -> void:
 			if data.has("equipped_cards"):
 				# JSON은 Key를 String으로 파싱하므로 Int로 복원 필요
 				var saved_equip = data["equipped_cards"]
-				equipped_cards.clear()
+				# 기존 슬롯 구문을 유지하기 위해 clear하지 않고 덮어쓰기 실시
 				for k in saved_equip.keys():
 					equipped_cards[int(k)] = saved_equip[k]
 		file.close()

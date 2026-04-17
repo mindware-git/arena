@@ -7,8 +7,6 @@ var canvas: CanvasLayer
 var slot_buttons: Array[Button] = []
 var card_buttons: Array[Button] = []
 
-var _selected_slot: int = 0  # 기본으로 0번 슬롯 선택
-
 func _ready() -> void:
 	canvas = CanvasLayer.new()
 	add_child(canvas)
@@ -47,42 +45,63 @@ func _create_ui() -> void:
 	var slot_title := Label.new()
 	slot_title.text = "장착 중인 카드"
 	slot_title.add_theme_font_size_override("font_size", 24)
-	slot_title.position = Vector2(50, 120)
+	slot_title.position = Vector2(50, 110)
 	canvas.add_child(slot_title)
 	
 	var slot_container := HBoxContainer.new()
-	slot_container.position = Vector2(50, 160)
-	slot_container.size = Vector2(1180, 150)
+	slot_container.position = Vector2(50, 150)
+	slot_container.size = Vector2(1180, 140)
 	slot_container.add_theme_constant_override("separation", 20)
 	canvas.add_child(slot_container)
 	
-	for i in range(2):
+	for i in range(4):
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(250, 150)
+		btn.custom_minimum_size = Vector2(280, 140)
 		btn.pressed.connect(_on_slot_pressed.bind(i))
 		slot_buttons.append(btn)
 		slot_container.add_child(btn)
 	
-	# 하단: 보유 카드 리스트 레이아웃
+	# 하단: 보유 카드 리스트 레이아웃 (스크롤 기능 추가)
 	var owned_title := Label.new()
 	owned_title.text = "보유 카드"
 	owned_title.add_theme_font_size_override("font_size", 24)
-	owned_title.position = Vector2(50, 360)
+	owned_title.position = Vector2(50, 320)
 	canvas.add_child(owned_title)
 	
-	var owned_container := HBoxContainer.new()
-	owned_container.position = Vector2(50, 400)
-	owned_container.size = Vector2(1180, 250)
-	owned_container.add_theme_constant_override("separation", 20)
-	canvas.add_child(owned_container)
+	var scroll := ScrollContainer.new()
+	scroll.position = Vector2(50, 360)
+	scroll.size = Vector2(1180, 320)
+	canvas.add_child(scroll)
 	
+	var owned_columns := HBoxContainer.new()
+	owned_columns.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	owned_columns.add_theme_constant_override("separation", 20)
+	scroll.add_child(owned_columns)
+	
+	var columns: Dictionary = {}
+	for i in range(4):
+		var vbox := VBoxContainer.new()
+		vbox.custom_minimum_size = Vector2(280, 0)
+		vbox.add_theme_constant_override("separation", 10)
+		
+		var col_label := Label.new()
+		col_label.text = GameState.card_type_names[i]
+		col_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		vbox.add_child(col_label)
+		
+		owned_columns.add_child(vbox)
+		columns[i] = vbox
+		
 	for i in range(GameState.owned_cards.size()):
 		var card_id = GameState.owned_cards[i]
+		var card_data = GameState.card_db.get(card_id)
+		var c_type = card_data.get("type", 0)
+		
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(200, 250)
+		btn.custom_minimum_size = Vector2(280, 100)
 		btn.pressed.connect(_on_card_pressed.bind(card_id))
 		card_buttons.append(btn)
-		owned_container.add_child(btn)
+		columns[c_type].add_child(btn)
 		
 	# UI 초기화 렌더링
 	_update_ui()
@@ -91,30 +110,22 @@ func _update_ui() -> void:
 	# 장착 슬롯 렌더링
 	for i in range(slot_buttons.size()):
 		var btn = slot_buttons[i]
+		var type_name = GameState.card_type_names[i]
 		var card_id = GameState.equipped_cards.get(i, "")
 		
-		# 선택 하이라이트 스타일
 		var style := StyleBoxFlat.new()
 		style.set_corner_radius_all(10)
 		
-		if i == _selected_slot:
-			style.border_width_bottom = 6
-			style.border_width_top = 6
-			style.border_width_left = 6
-			style.border_width_right = 6
-			style.border_color = Color(1.0, 0.8, 0.2) # 황금색 박스 라인
-		
 		if card_id == "":
-			btn.text = "빈 슬롯\n(선택 가능)"
+			btn.text = type_name + "\n(빈 슬롯)"
 			style.bg_color = Color(0.2, 0.2, 0.2)
 		else:
 			var card_data = GameState.card_db.get(card_id)
-			btn.text = card_data["name"] + "\n(장착 됨)"
+			btn.text = type_name + "\n" + card_data["name"] + "\n(장착 됨)"
 			style.bg_color = card_data["color"]
 			
 		btn.add_theme_stylebox_override("normal", style)
 		
-		# hover 
 		var style_hover = style.duplicate()
 		style_hover.bg_color = style.bg_color.lightened(0.2)
 		btn.add_theme_stylebox_override("hover", style_hover)
@@ -125,14 +136,11 @@ func _update_ui() -> void:
 		var card_id = GameState.owned_cards[i]
 		var card_data = GameState.card_db.get(card_id)
 		
-		# 이 카드가 어느 슬롯에 장착되어있는가?
-		var eq_slot = -1
-		for k in GameState.equipped_cards.keys():
-			if GameState.equipped_cards[k] == card_id:
-				eq_slot = k
+		var c_type = card_data.get("type", 0)
+		var is_equipped = (GameState.equipped_cards.get(c_type) == card_id)
 				
 		var label_text = card_data["name"]
-		if eq_slot != -1:
+		if is_equipped:
 			label_text += "\n[장착 중]"
 			
 		btn.text = label_text
@@ -140,8 +148,13 @@ func _update_ui() -> void:
 		var style := StyleBoxFlat.new()
 		style.set_corner_radius_all(10)
 		style.bg_color = card_data["color"]
-		if eq_slot != -1:
-			style.bg_color = style.bg_color.darkened(0.5) # 연하게/어둡게 표시해 장착됨 표시
+		if is_equipped:
+			style.bg_color = style.bg_color.darkened(0.5) 
+			style.border_width_bottom = 4
+			style.border_width_top = 4
+			style.border_width_left = 4
+			style.border_width_right = 4
+			style.border_color = Color(1.0, 0.8, 0.2) # 황금색 테두리로 강조 표시
 			
 		btn.add_theme_stylebox_override("normal", style)
 		
@@ -150,24 +163,23 @@ func _update_ui() -> void:
 		btn.add_theme_stylebox_override("hover", style_hover)
 
 func _on_slot_pressed(slot_index: int) -> void:
-	if _selected_slot == slot_index:
-		# 같은 슬롯을 또 눌렀으면 장착 해제
-		GameState.equipped_cards[slot_index] = ""
-		GameState.save_state()
-	else:
-		_selected_slot = slot_index
+	GameState.equipped_cards[slot_index] = ""
+	GameState.save_state()
 	_update_ui()
 
 func _on_card_pressed(card_id: String) -> void:
-	if _selected_slot < 0 or _selected_slot >= slot_buttons.size():
+	var card_data = GameState.card_db.get(card_id)
+	if card_data == null:
 		return
 		
-	# 다른 슬롯에 같은 카드가 있는지 확인하여 해제 (한 카드를 여러 슬롯에 못 끼게)
-	for k in GameState.equipped_cards.keys():
-		if GameState.equipped_cards[k] == card_id:
-			GameState.equipped_cards[k] = ""
+	var c_type = card_data.get("type", 0)
+	
+	# 이미 장착된 카드라면 해제, 아니면 해당 종류 슬롯에 장착
+	if GameState.equipped_cards.get(c_type) == card_id:
+		GameState.equipped_cards[c_type] = ""
+	else:
+		GameState.equipped_cards[c_type] = card_id
 			
-	GameState.equipped_cards[_selected_slot] = card_id
 	GameState.save_state()
 	_update_ui()
 
