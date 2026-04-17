@@ -109,6 +109,10 @@ func _start_authentication() -> void:
 	print("DEBUG: Authentication successful, setting session")
 	Online.set_nakama_session(result)
 	
+	# 보안 인증 (Mock) - 로컬 파일로 불러와진 세팅을 논리적 서버 자산과 대조
+	GameState.verify_equipped_cards_with_server_mock()
+
+	
 	_status_label.text = "인증 완료!"
 	print("DEBUG: Transitioning to lobby")
 	await get_tree().create_timer(0.5).timeout

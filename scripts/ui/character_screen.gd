@@ -153,6 +153,7 @@ func _on_slot_pressed(slot_index: int) -> void:
 	if _selected_slot == slot_index:
 		# 같은 슬롯을 또 눌렀으면 장착 해제
 		GameState.equipped_cards[slot_index] = ""
+		GameState.save_state()
 	else:
 		_selected_slot = slot_index
 	_update_ui()
@@ -167,6 +168,7 @@ func _on_card_pressed(card_id: String) -> void:
 			GameState.equipped_cards[k] = ""
 			
 	GameState.equipped_cards[_selected_slot] = card_id
+	GameState.save_state()
 	_update_ui()
 
 func _on_back_pressed() -> void:
