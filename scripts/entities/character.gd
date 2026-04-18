@@ -308,7 +308,7 @@ func _handle_input() -> void:
 # Stats
 # ═══════════════════════════════════════════════════════════════════════════════
 
-@rpc("any_peer")
+@rpc("any_peer", "call_remote", "reliable")
 func take_damage(amount: int) -> void:
 	if _is_dead:
 		return
@@ -318,7 +318,30 @@ func take_damage(amount: int) -> void:
 	_update_hp_bar()
 	
 	if _current_hp <= 0:
+		if not _is_network_controlled:
+			# 내가 Owner인 경우: 사망 판정 후 브로드캐스트
+			_die()
+			rpc("sync_death")
+		else:
+			# 내가 Owner가 아닌 경우: 화면에서만 숨기고 공식 사망(sync_death) 대기
+			visible = false
+
+@rpc("any_peer", "call_remote", "reliable")
+func sync_death() -> void:
+	if not _is_dead:
 		_die()
+
+## 다른 캐릭터에게 데미지 적용 (Owner 클라이언트가 실행)
+func apply_damage_to(target: Character, amount: int) -> void:
+	if not target:
+		return
+	
+	# 1. 로컬에 즉시 적용 (내 화면에서 상대 HP 즉시 감소)
+	target.take_damage(amount)
+	
+	# 2. RPC 브로드캐스트 (상대 클라이언트 및 제3자 클라이언트 화면 갱신용)
+	if target._is_network_controlled:
+		target.rpc("take_damage", amount)
 
 
 func _update_hp_bar() -> void:
@@ -376,6 +399,7 @@ func restore_bp(amount: int) -> void:
 func _die() -> void:
 	_is_dead = true
 	_is_boosting = false
+	visible = false
 	died.emit()
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -595,11 +619,8 @@ func _on_melee_hitbox_entered(body: Node2D) -> void:
 	
 	if body is Character:
 		var character := body as Character
-		# 네트워크 플레이어면 RPC로 데미지 전달
-		if character._is_network_controlled:
-			character.rpc("take_damage", _hitbox_damage)
-		else:
-			character.take_damage(_hitbox_damage)
+		# 공격 주체가 데미지 적용
+		apply_damage_to(character, _hitbox_damage)
 
 
 ## AOE 히트박스 활성화
@@ -621,11 +642,8 @@ func _activate_aoe_hitbox(radius: float, damage: int) -> void:
 	for body in aoe_hitbox.get_overlapping_bodies():
 		if body != self and body is Character:
 			var character := body as Character
-			# 네트워크 플레이어면 RPC로 데미지 전달
-			if character._is_network_controlled:
-				character.rpc("take_damage", _hitbox_damage)
-			else:
-				character.take_damage(_hitbox_damage)
+			# 공격 주체가 데미지 적용
+			apply_damage_to(character, _hitbox_damage)
 	
 	# 즉시 제거
 	aoe_hitbox.queue_free()

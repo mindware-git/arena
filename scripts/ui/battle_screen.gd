@@ -508,15 +508,6 @@ func _on_player_died() -> void:
 func _on_enemy_died(enemy: Character) -> void:
 	character_died.emit(enemy)
 	_kill_count += 1
-	# 적 제거 (약간의 딜레이 후)
-	call_deferred("_remove_enemy", enemy)
-
-
-func _remove_enemy(enemy: Character) -> void:
-	if _enemies.has(enemy):
-		_enemies.erase(enemy)
-	if is_instance_valid(enemy):
-		enemy.queue_free()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Network Sync (for multiplayer)
@@ -553,9 +544,12 @@ func setup_network_player(peer_id: int, character_id: String, is_local: bool, sp
 	
 	if is_local:
 		_player = character
+		character.died.connect(_on_player_died)
 		player_spawned.emit(character)
 	else:
 		_remote_players[peer_id] = character
-		#print("[DEBUG] Added to _remote_players: peer_id=%s, total=%s" % [peer_id, _remote_players.keys()])
+		_enemies.append(character)
+		character.died.connect(_on_enemy_died.bind(character))
+		enemy_spawned.emit(character)
 	
 	return character

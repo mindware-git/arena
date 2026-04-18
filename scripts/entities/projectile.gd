@@ -42,15 +42,11 @@ var owner_character: Character:
 func _ready() -> void:
 	# 충돌 설정 (레이어 1: 캐릭터 감지)
 	collision_mask = 1
+	monitoring = true
 	
-	# 시각 전용 투사체는 충돌 감지 비활성화 (데미지 판정 안 함)
-	if _is_visual_only:
-		monitoring = false
-	else:
-		monitoring = true
-		# 충돌 감지 시그널 연결 (owner 클라이언트만)
-		body_entered.connect(_on_body_entered)
-		area_entered.connect(_on_area_entered)
+	# 충돌 감지 시그널 연결 (양쪽 클라이언트 모두 감지 → 즉시 사라짐)
+	body_entered.connect(_on_body_entered)
+	area_entered.connect(_on_area_entered)
 	
 	# 시각적 표시
 	_setup_visual()
@@ -133,15 +129,15 @@ func _on_body_entered(body: Node2D) -> void:
 	if body == _owner:
 		return
 	
-	# Character에 충돌 시 데미지
+	# Character에 충돌 시
 	if body is Character:
-		var character := body as Character
-		# 네트워크 플레이어면 RPC로 데미지 전달
-		if character.is_network_controlled():
-			character.rpc("take_damage", _damage)
-		else:
-			character.take_damage(_damage)
+		# 데미지는 owner 클라이언트만 적용 (visual_only이면 스킵)
+		if not _is_visual_only:
+			var character := body as Character
+			# owner가 주체가 되어 apply_damage_to 호출
+			_owner.apply_damage_to(character, _damage)
 		hit.emit(body)
+		# 양쪽 클라이언트 모두 즉시 제거 (시각적 동기화)
 		queue_free()
 
 
