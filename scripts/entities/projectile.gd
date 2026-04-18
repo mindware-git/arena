@@ -20,6 +20,7 @@ var _distance_traveled: float = 0.0
 var _max_range: float = 500.0
 var _element: GameManager.ElementType = GameManager.ElementType.EARTH
 var _is_special: bool = false  # 필살기 투사체 여부
+var _is_visual_only: bool = false  # 원격 클라이언트용 (시각 전용, 데미지 판정 없음)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Properties
@@ -41,11 +42,15 @@ var owner_character: Character:
 func _ready() -> void:
 	# 충돌 설정 (레이어 1: 캐릭터 감지)
 	collision_mask = 1
-	monitoring = true
 	
-	# 충돌 감지 시그널 연결
-	body_entered.connect(_on_body_entered)
-	area_entered.connect(_on_area_entered)
+	# 시각 전용 투사체는 충돌 감지 비활성화 (데미지 판정 안 함)
+	if _is_visual_only:
+		monitoring = false
+	else:
+		monitoring = true
+		# 충돌 감지 시그널 연결 (owner 클라이언트만)
+		body_entered.connect(_on_body_entered)
+		area_entered.connect(_on_area_entered)
 	
 	# 시각적 표시
 	_setup_visual()
@@ -59,7 +64,8 @@ func init(
 	p_owner: Character,
 	p_max_range: float,
 	p_element: GameManager.ElementType = GameManager.ElementType.EARTH,
-	p_is_special: bool = false
+	p_is_special: bool = false,
+	p_visual_only: bool = false
 ) -> void:
 	_direction = p_direction.normalized()
 	_speed = p_speed
@@ -68,6 +74,7 @@ func init(
 	_max_range = p_max_range
 	_element = p_element
 	_is_special = p_is_special
+	_is_visual_only = p_visual_only
 
 
 func _setup_visual() -> void:

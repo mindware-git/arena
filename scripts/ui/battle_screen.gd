@@ -11,6 +11,7 @@ extends Node2D
 # Signals
 # ═══════════════════════════════════════════════════════════════════════════════
 
+signal transition_requested(next_screen: Node)
 signal battle_started()
 signal battle_ended(winning_team: int)
 signal player_spawned(player: Character)
@@ -336,6 +337,17 @@ func start_battle(
 func end_battle(winning_team: int) -> void:
 	_is_battle_active = false
 	battle_ended.emit(winning_team)
+	
+	# winning_team: 0 = 플레이어 승리, 1 = 적 승리
+	var is_victory := (winning_team == 0)
+	
+	# 2초 후 결과 화면으로 전환
+	get_tree().create_timer(2.0).timeout.connect(
+		func():
+			var result := ResultScreen.new()
+			result.set_result(is_victory, _battle_time)
+			transition_requested.emit(result)
+	)
 
 
 func reset_battle() -> void:

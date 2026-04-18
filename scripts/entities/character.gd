@@ -493,6 +493,9 @@ func _execute_melee_hitbox(attack: CharacterData.Attack) -> void:
 
 ## 투사체 공격 실행
 func _execute_projectile(attack: CharacterData.Attack) -> void:
+	var is_special := attack.cost_type == CharacterData.Attack.CostType.MP
+	
+	# 로컬 투사체 생성 (데미지 판정 함)
 	var projectile := Projectile.new()
 	projectile.init(
 		_facing_direction,
@@ -501,7 +504,7 @@ func _execute_projectile(attack: CharacterData.Attack) -> void:
 		self,
 		_data.projectile_range,
 		_data.element,
-		attack.cost_type == CharacterData.Attack.CostType.MP  # MP 사용 = 특수 공격
+		is_special
 	)
 	projectile.position = position
 	
@@ -510,6 +513,17 @@ func _execute_projectile(attack: CharacterData.Attack) -> void:
 		parent.add_child(projectile)
 	else:
 		get_tree().current_scene.add_child(projectile)
+	
+	# 원격 클라이언트에 투사체 생성 동기화 (RPC)
+	_sync_projectile_spawn(
+		_facing_direction,
+		attack.projectile_speed,
+		attack.damage,
+		position,
+		_data.projectile_range,
+		int(_data.element),
+		is_special
+	)
 
 
 ## AOE 광역 공격 실행
@@ -690,6 +704,38 @@ func sync_remote_position(_pos: Vector2, _vel: Vector2, _facing: Vector2, _hp: i
 		_facing_direction = _facing
 		_current_hp = _hp
 		_update_hp_bar()
+
+
+func _sync_projectile_spawn(
+	dir: Vector2, speed: float, damage: int, pos: Vector2,
+	max_range: float, element: int, is_special: bool
+) -> void:
+	# 온라인 플레이가 아니면 동기화하지 않음
+	if not OnlineMatch.nakama_socket or OnlineMatch.get_match_id().is_empty():
+		return
+	rpc("_spawn_remote_projectile", dir, speed, damage, pos, max_range, element, is_special)
+
+
+@rpc("any_peer", "reliable")
+func _spawn_remote_projectile(
+	dir: Vector2, speed: float, damage: int, pos: Vector2,
+	max_range: float, element: int, is_special: bool
+) -> void:
+	# 원격 클라이언트에서 시각 전용 투사체 생성 (데미지 판정 없음)
+	var projectile := Projectile.new()
+	projectile.init(
+		dir, speed, damage, self, max_range,
+		element as GameManager.ElementType,
+		is_special,
+		true  # visual_only = true
+	)
+	projectile.position = pos
+	
+	var parent := get_parent()
+	if parent:
+		parent.add_child(projectile)
+	else:
+		get_tree().current_scene.add_child(projectile)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
