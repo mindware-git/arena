@@ -94,8 +94,9 @@ func _create_ui() -> void:
 		
 	for i in range(GameState.owned_cards.size()):
 		var card_id = GameState.owned_cards[i]
-		var card_data = GameState.card_db.get(card_id)
-		var c_type = card_data.get("type", 0)
+		var card_data: CardData = CardRegistry.get_card(card_id)
+		if card_data == null: continue
+		var c_type = card_data.type
 		
 		var btn := Button.new()
 		btn.custom_minimum_size = Vector2(200, 70) # 하단 보유카드는 더 작게
@@ -120,9 +121,13 @@ func _update_ui() -> void:
 			btn.text = type_name + "\n(빈 슬롯)"
 			style.bg_color = Color(0.2, 0.2, 0.2)
 		else:
-			var card_data = GameState.card_db.get(card_id)
-			btn.text = type_name + "\n" + card_data["name"] + "\n(장착 됨)"
-			style.bg_color = card_data["color"]
+			var card_data: CardData = CardRegistry.get_card(card_id)
+			if card_data:
+				btn.text = type_name + "\n" + card_data.name + "\n(장착 됨)"
+				style.bg_color = card_data.color
+			else:
+				btn.text = type_name + "\n(알 수 없음)"
+				style.bg_color = Color(0.2, 0.2, 0.2)
 			
 		btn.add_theme_stylebox_override("normal", style)
 		
@@ -134,12 +139,13 @@ func _update_ui() -> void:
 	for i in range(card_buttons.size()):
 		var btn = card_buttons[i]
 		var card_id = GameState.owned_cards[i]
-		var card_data = GameState.card_db.get(card_id)
+		var card_data: CardData = CardRegistry.get_card(card_id)
+		if card_data == null: continue
 		
-		var c_type = card_data.get("type", 0)
+		var c_type = card_data.type
 		var is_equipped = (GameState.equipped_cards.get(c_type) == card_id)
 				
-		var label_text = card_data["name"]
+		var label_text = card_data.name
 		if is_equipped:
 			label_text += "\n[장착 중]"
 			
@@ -147,7 +153,7 @@ func _update_ui() -> void:
 		
 		var style := StyleBoxFlat.new()
 		style.set_corner_radius_all(10)
-		style.bg_color = card_data["color"]
+		style.bg_color = card_data.color
 		if is_equipped:
 			style.bg_color = style.bg_color.darkened(0.5) 
 			style.border_width_bottom = 4
@@ -168,11 +174,11 @@ func _on_slot_pressed(slot_index: int) -> void:
 	_update_ui()
 
 func _on_card_pressed(card_id: String) -> void:
-	var card_data = GameState.card_db.get(card_id)
+	var card_data: CardData = CardRegistry.get_card(card_id)
 	if card_data == null:
 		return
 		
-	var c_type = card_data.get("type", 0)
+	var c_type = card_data.type
 	
 	# 이미 장착된 카드라면 해제, 아니면 해당 종류 슬롯에 장착
 	if GameState.equipped_cards.get(c_type) == card_id:

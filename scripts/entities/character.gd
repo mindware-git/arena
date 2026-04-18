@@ -32,6 +32,20 @@ var _current_hp: int = 0
 var _current_mp: int = 0
 var _current_bp: int = 0
 
+# Final Stats (Calculated from Data + Equips)
+var _final_max_hp: int
+var _final_max_mp: int
+var _final_max_bp: int
+var _final_melee_power: int
+var _final_ranged_power: int
+var _final_max_speed: float
+var _final_rotation_speed: float
+var _final_acceleration: float
+
+var _final_critical_chance: float
+var _final_critical_multiplier: float
+var _final_accl_proc_chance: float
+
 var _is_dead: bool = false
 var _is_controllable: bool = false  # 플레이어만 true, 적은 false
 
@@ -57,6 +71,10 @@ var _facing_direction: Vector2 = Vector2.RIGHT
 
 # Aim 표시
 var _aim_line: Line2D = null
+
+# Proc 상태 저장
+var _is_accl_proc_active: bool = false
+var _accl_proc_timer: float = 0.0
 
 # 카메라
 var _camera: Camera2D = null
@@ -101,9 +119,10 @@ func _ready() -> void:
 
 func init(data: CharacterData) -> void:
 	_data = data
-	_current_hp = data.max_hp
-	_current_mp = data.max_mp
-	_current_bp = data.max_bp
+	_calculate_final_stats()
+	_current_hp = _final_max_hp
+	_current_mp = _final_max_mp
+	_current_bp = _final_max_bp
 	_is_dead = false
 	
 	# 쿨다운 초기화
@@ -127,6 +146,61 @@ func init(data: CharacterData) -> void:
 	
 	# Aim 표시 설정
 	_setup_aim_indicator()
+
+func _calculate_final_stats() -> void:
+	if not _data: return
+	
+	var base_hp := float(_data.max_hp)
+	var base_mp := float(_data.max_mp)
+	var base_bp := float(_data.max_bp)
+	var base_melee := float(_data.melee_power)
+	var base_ranged := float(_data.ranged_power)
+	var base_speed := _data.max_speed
+	var base_rotation := _data.rotation_speed
+	var base_accel := _data.acceleration
+	
+	var base_crit_chance := 0.0
+	var base_crit_mult := 1.5
+	var base_accl_proc := 0.0
+	
+	var add_mods := {
+		"max_hp": 0.0, "max_mp": 0.0, "max_bp": 0.0,
+		"melee_power": 0.0, "ranged_power": 0.0, "max_speed": 0.0,
+		"rotation_speed": 0.0, "acceleration": 0.0,
+		"critical_chance": 0.0, "critical_multiplier": 0.0, "accl_proc_chance": 0.0
+	}
+	var mult_mods := add_mods.duplicate()
+	for k in mult_mods.keys(): mult_mods[k] = 1.0
+	
+	# 로컬 조작 플레이어만 카드 적용. 멀티나 몬스터의 경우 장비/스텟 적용 확장을 위해 수정해야할 수 있음
+	if _is_controllable:
+		if GameState.get("equipped_cards"):
+			for slot in GameState.equipped_cards:
+				var card_id = GameState.equipped_cards[slot]
+				if card_id == "": continue
+				
+				var card: CardData = CardRegistry.get_card(card_id)
+				if not card: continue
+				
+				for stat in card.modifiers:
+					if add_mods.has(stat):
+						add_mods[stat] += card.modifiers[stat].get("add", 0.0)
+						mult_mods[stat] *= card.modifiers[stat].get("mult", 1.0)
+	
+	_final_max_hp = int(max(1, (base_hp + add_mods["max_hp"]) * mult_mods["max_hp"]))
+	_final_max_mp = int(max(0, (base_mp + add_mods["max_mp"]) * mult_mods["max_mp"]))
+	_final_max_bp = int(max(0, (base_bp + add_mods["max_bp"]) * mult_mods["max_bp"]))
+	_final_melee_power = int(max(0, (base_melee + add_mods["melee_power"]) * mult_mods["melee_power"]))
+	_final_ranged_power = int(max(0, (base_ranged + add_mods["ranged_power"]) * mult_mods["ranged_power"]))
+	
+	_final_max_speed = max(0.0, (base_speed + add_mods["max_speed"]) * mult_mods["max_speed"])
+	_final_rotation_speed = max(0.0, (base_rotation + add_mods["rotation_speed"]) * mult_mods["rotation_speed"])
+	_final_acceleration = max(0.0, (base_accel + add_mods["acceleration"]) * mult_mods["acceleration"])
+	
+	_final_critical_chance = clamp((base_crit_chance + add_mods["critical_chance"]) * mult_mods["critical_chance"], 0.0, 1.0)
+	_final_critical_multiplier = max(1.0, (base_crit_mult + add_mods["critical_multiplier"]) * mult_mods["critical_multiplier"])
+	_final_accl_proc_chance = clamp((base_accl_proc + add_mods["accl_proc_chance"]) * mult_mods["accl_proc_chance"], 0.0, 1.0)
+
 
 
 func _setup_collision() -> void:
@@ -272,21 +346,36 @@ func _move(delta: float) -> void:
 			input_dir.y += 1
 		input_dir = input_dir.normalized()
 	
-	# 이동 방향 업데이트
+	# 이동 방향 및 회전 업데이트 (lerp_angle 적용)
 	if input_dir != Vector2.ZERO:
-		_facing_direction = input_dir
-		_update_aim_line()  # 방향 변경 시 aim 표시 업데이트
+		var current_angle = _facing_direction.angle()
+		var target_angle = input_dir.angle()
+		var new_angle = lerp_angle(current_angle, target_angle, _final_rotation_speed * delta)
+		_facing_direction = Vector2.RIGHT.rotated(new_angle).normalized()
+		_update_aim_line()
+		
+		# 정지 상태에서 출발할 때 '가속도 발동' 판정
+		if velocity.length() < 10.0 and not _is_accl_proc_active:
+			if randf() <= _final_accl_proc_chance:
+				_is_accl_proc_active = true
+	else:
+		_is_accl_proc_active = false
 	
 	# 속도 계산 (부스터 고려)
-	var target_speed := _data.max_speed
+	var target_speed := _final_max_speed
 	if _is_boosting:
-		target_speed = _data.max_speed * _data.booster_speed_multiplier
+		target_speed = _final_max_speed * _data.booster_speed_multiplier
 	
-	# 가속도 적용
+	# 실제 적용 가속도 결정
+	var current_accel = _final_acceleration
+	if _is_accl_proc_active:
+		current_accel *= 5.0 # 발동 시 5배 가속
+	
+	# 이동 적용
 	if input_dir != Vector2.ZERO:
-		velocity = velocity.move_toward(input_dir * target_speed, _data.acceleration * delta * 10)
+		velocity = velocity.move_toward(input_dir * target_speed, current_accel * delta * 10)
 	else:
-		velocity = velocity.move_toward(Vector2.ZERO, _data.acceleration * delta * 10)
+		velocity = velocity.move_toward(Vector2.ZERO, current_accel * delta * 10)
 
 
 func _handle_input() -> void:
@@ -490,6 +579,16 @@ func execute_attack(attack: CharacterData.Attack, index: int = -1) -> bool:
 			_execute_projectile(attack)
 		CharacterData.Attack.Style.AOE_CENTER:
 			_execute_aoe_center(attack)
+			
+	# 이벤트 트리거 (로컬 캐릭터만)
+	if _is_controllable:
+		if GameState.get("equipped_cards"):
+			for slot in GameState.equipped_cards:
+				var c_id = GameState.equipped_cards[slot]
+				if c_id == "": continue
+				var c: CardData = CardRegistry.get_card(c_id)
+				if c and c.on_attack_launched:
+					c.on_attack_launched.call(attack, self)
 	
 	# 쿨다운 설정
 	if index >= 0:
@@ -510,21 +609,33 @@ func _pay_cost(attack: CharacterData.Attack) -> bool:
 			return true  # NONE
 
 
+## 최종 데미지 산출기
+func _get_final_damage(base_dmg: int, is_melee: bool) -> int:
+	var pwr = _final_melee_power if is_melee else _final_ranged_power
+	var final_dmg = base_dmg + pwr
+	
+	if _final_critical_chance > 0.0 and randf() <= _final_critical_chance:
+		final_dmg = int(final_dmg * _final_critical_multiplier)
+		
+	return final_dmg
+
 ## 근접 히트박스 공격 실행
 func _execute_melee_hitbox(attack: CharacterData.Attack) -> void:
-	_activate_hitbox(attack.range / 2.0, attack.damage, attack.hitbox_duration)
+	var dmg = _get_final_damage(attack.damage, true)
+	_activate_hitbox(attack.range / 2.0, dmg, attack.hitbox_duration)
 
 
 ## 투사체 공격 실행
 func _execute_projectile(attack: CharacterData.Attack) -> void:
 	var is_special := attack.cost_type == CharacterData.Attack.CostType.MP
+	var dmg = _get_final_damage(attack.damage, false)
 	
 	# 로컬 투사체 생성 (데미지 판정 함)
 	var projectile := Projectile.new()
 	projectile.init(
 		_facing_direction,
 		attack.projectile_speed,
-		attack.damage,
+		dmg,
 		self,
 		_data.projectile_range,
 		_data.element,
@@ -542,7 +653,7 @@ func _execute_projectile(attack: CharacterData.Attack) -> void:
 	_sync_projectile_spawn(
 		_facing_direction,
 		attack.projectile_speed,
-		attack.damage,
+		dmg,
 		position,
 		_data.projectile_range,
 		int(_data.element),
@@ -552,7 +663,8 @@ func _execute_projectile(attack: CharacterData.Attack) -> void:
 
 ## AOE 광역 공격 실행
 func _execute_aoe_center(attack: CharacterData.Attack) -> void:
-	_activate_aoe_hitbox(attack.range, attack.damage)
+	var dmg = _get_final_damage(attack.damage, true)
+	_activate_aoe_hitbox(attack.range, dmg)
 	_show_special_effect(attack.range)
 
 
