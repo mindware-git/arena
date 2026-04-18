@@ -50,13 +50,13 @@ func _create_ui() -> void:
 	
 	var slot_container := HBoxContainer.new()
 	slot_container.position = Vector2(50, 150)
-	slot_container.size = Vector2(1180, 140)
+	slot_container.size = Vector2(1180, 100)
 	slot_container.add_theme_constant_override("separation", 20)
 	canvas.add_child(slot_container)
 	
-	for i in range(4):
+	for i in range(GameState.CardType.size()):
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(280, 140)
+		btn.custom_minimum_size = Vector2(200, 100)  # 가로/세로 크기 감소
 		btn.pressed.connect(_on_slot_pressed.bind(i))
 		slot_buttons.append(btn)
 		slot_container.add_child(btn)
@@ -79,9 +79,9 @@ func _create_ui() -> void:
 	scroll.add_child(owned_columns)
 	
 	var columns: Dictionary = {}
-	for i in range(4):
+	for i in range(GameState.CardType.size()):
 		var vbox := VBoxContainer.new()
-		vbox.custom_minimum_size = Vector2(280, 0)
+		vbox.custom_minimum_size = Vector2(200, 0)
 		vbox.add_theme_constant_override("separation", 10)
 		
 		var col_label := Label.new()
@@ -98,7 +98,7 @@ func _create_ui() -> void:
 		var c_type = card_data.get("type", 0)
 		
 		var btn := Button.new()
-		btn.custom_minimum_size = Vector2(280, 100)
+		btn.custom_minimum_size = Vector2(200, 70) # 하단 보유카드는 더 작게
 		btn.pressed.connect(_on_card_pressed.bind(card_id))
 		card_buttons.append(btn)
 		columns[c_type].add_child(btn)

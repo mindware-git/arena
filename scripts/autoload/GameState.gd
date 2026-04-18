@@ -29,14 +29,16 @@ enum CardType {
 	MAIN_WEAPON = 0,
 	SUB_WEAPON = 1,
 	ARMOR = 2,
-	SHOES = 3
+	SHOES = 3,
+	ULTIMATE = 4
 }
 
 var card_type_names = {
 	CardType.MAIN_WEAPON: "주무기",
 	CardType.SUB_WEAPON: "보조무기",
 	CardType.ARMOR: "갑옷",
-	CardType.SHOES: "신발"
+	CardType.SHOES: "신발",
+	CardType.ULTIMATE: "궁극기"
 }
 
 var card_db: Dictionary = {
@@ -57,14 +59,22 @@ var card_db: Dictionary = {
 	"card_13": {"name": "강철 방패", "type": CardType.SUB_WEAPON, "color": Color(0.6, 0.6, 0.7)},
 	"card_14": {"name": "마력의 수정", "type": CardType.SUB_WEAPON, "color": Color(0.4, 0.2, 0.9)},
 	"card_15": {"name": "미스릴 갑옷", "type": CardType.ARMOR, "color": Color(0.8, 0.9, 0.9)},
-	"card_16": {"name": "여행자의 신발", "type": CardType.SHOES, "color": Color(0.4, 0.8, 0.5)}
+	"card_16": {"name": "여행자의 신발", "type": CardType.SHOES, "color": Color(0.4, 0.8, 0.5)},
+	
+	# --- 궁극기 카드들 ---
+	"card_17": {"name": "드래곤 스트라이크", "type": CardType.ULTIMATE, "color": Color(0.9, 0.8, 0.1)},
+	"card_18": {"name": "메테오 소환", "type": CardType.ULTIMATE, "color": Color(0.9, 0.2, 0.8)},
+	"card_19": {"name": "시간 정지", "type": CardType.ULTIMATE, "color": Color(0.1, 0.9, 0.8)},
+	"card_20": {"name": "신의 심판", "type": CardType.ULTIMATE, "color": Color(1.0, 1.0, 0.8)},
+	"card_21": {"name": "광폭화", "type": CardType.ULTIMATE, "color": Color(0.6, 0.0, 0.0)}
 }
 
 var owned_cards: Array[String] = [
 	"card_1", "card_2", "card_3", "card_4",
 	"card_5", "card_6", "card_7", "card_8",
 	"card_9", "card_10", "card_11", "card_12", 
-	"card_13", "card_14", "card_15", "card_16"
+	"card_13", "card_14", "card_15", "card_16",
+	"card_17", "card_18", "card_19", "card_20", "card_21"
 ]
 
 # Slot indices: 0(Main), 1(Sub), 2(Armor), 3(Shoes)
@@ -72,7 +82,8 @@ var equipped_cards: Dictionary = {
 	CardType.MAIN_WEAPON: "",
 	CardType.SUB_WEAPON: "",
 	CardType.ARMOR: "",
-	CardType.SHOES: ""
+	CardType.SHOES: "",
+	CardType.ULTIMATE: ""
 }
 
 const SAVE_PATH = "user://game_save.json"
