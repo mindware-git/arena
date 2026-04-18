@@ -19,6 +19,20 @@ signal enemy_spawned(enemy: Character)
 signal character_died(character: Character)
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Battle Phase (방어적 상태 머신)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+enum BattlePhase {
+	NONE,       # 아직 시작 안됨
+	LOADING,    # 캐릭터 스폰 완료, peer 준비 대기
+	PLAYING,    # 양측 준비 완료, 게임 진행 중
+	ENDING,     # 승패 결정, 종료 처리 중
+	DONE,       # 결과 화면 전환 완료
+}
+
+var _battle_phase: int = BattlePhase.NONE
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Constants
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -47,6 +61,8 @@ var _kill_count: int = 0
 # 멀티플레이어
 var _is_multiplayer: bool = false
 var _remote_players: Dictionary = {}  # peer_id -> Character
+var _peers_ready: Dictionary = {}     # peer_id -> bool (배틀 시작 핸드셰이크)
+var _peers_ended: Dictionary = {}     # peer_id -> bool (배틀 종료 확인)
 
 # 대기 중인 배틀 데이터 (_ready에서 처리)
 var _pending_battle_data: Dictionary = {}
@@ -101,6 +117,10 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	if not _is_battle_active:
+		return
+	
+	# PLAYING 상태에서만 배틀 로직 실행
+	if _battle_phase != BattlePhase.PLAYING:
 		return
 	
 	_battle_time += delta
@@ -293,7 +313,11 @@ func start_battle(
 	allies: Array[Dictionary] = [],   # [{"peer_id": int, "character_id": String}, ...]
 	enemies: Array[Dictionary] = []   # [{"peer_id": int, "character_id": String}, ...]
 ) -> void:
-	#print("[DEBUG] BattleScreen.start_battle called: my_char=%s, allies=%s, enemies=%s" % [my_character_id, allies, enemies])
+	print("[Battle] start_battle: phase=%s, char=%s" % [BattlePhase.keys()[_battle_phase], my_character_id])
+	
+	# 방어: 이미 진행 중인 배틀이 있으면 무시
+	assert(_battle_phase == BattlePhase.NONE or _battle_phase == BattlePhase.DONE,
+		"start_battle called in invalid phase: %s" % BattlePhase.keys()[_battle_phase])
 	
 	# _ready()보다 먼저 호출될 수 있으므로 null 체크
 	if not _registry:
@@ -301,57 +325,139 @@ func start_battle(
 	
 	_clear_battle()
 	_kill_count = 0
+	_battle_phase = BattlePhase.LOADING
 	
 	# 내 플레이어 스폰 (로컬 제어)
-	spawn_player(my_character_id)
+	var player_node := spawn_player(my_character_id)
+	assert(player_node != null, "Failed to spawn player: %s" % my_character_id)
 	
 	# 아군 스폰 (네트워크 제어)
 	for i in range(allies.size()):
 		var ally := allies[i]
 		var peer_id: int = ally.get("peer_id", 0)
 		var char_id: String = ally.get("character_id", "")
+		assert(peer_id > 0, "Ally peer_id must be > 0, got: %d" % peer_id)
+		assert(not char_id.is_empty(), "Ally character_id must not be empty")
 		if peer_id > 0 and not char_id.is_empty():
 			var pos := PLAYER_SPAWN_POSITION + Vector2(100 * (i + 1), 0)
 			setup_network_player(peer_id, char_id, false, pos)
 	
 	# 적군 스폰 (네트워크 제어 또는 기본 AI 적)
+	_is_multiplayer = false
 	if enemies.is_empty():
-		# 기본 AI 적 스폰
+		# 기본 AI 적 스폰 (싱글플레이)
 		for i in range(ENEMY_SPAWN_POSITIONS.size()):
 			spawn_enemy("enemy_slime", ENEMY_SPAWN_POSITIONS[i])
 	else:
+		_is_multiplayer = true
 		# 네트워크 플레이어 적 스폰
 		for i in range(enemies.size()):
 			var enemy := enemies[i]
 			var peer_id: int = enemy.get("peer_id", 0)
 			var char_id: String = enemy.get("character_id", "")
+			assert(peer_id > 0, "Enemy peer_id must be > 0, got: %d" % peer_id)
+			assert(not char_id.is_empty(), "Enemy character_id must not be empty")
 			if peer_id > 0 and not char_id.is_empty():
 				var pos := ENEMY_SPAWN_POSITIONS[i % ENEMY_SPAWN_POSITIONS.size()]
 				setup_network_player(peer_id, char_id, false, pos)
 	
 	_is_battle_active = true
 	_battle_time = 0.0
+	
+	# ── 핸드셰이크: 멀티플레이어면 준비 신호 교환 ──
+	if _is_multiplayer and _remote_players.size() > 0:
+		# 초기화: 모든 원격 peer를 미준비 상태로
+		_peers_ready.clear()
+		for peer_id in _remote_players:
+			_peers_ready[peer_id] = false
+		
+		# 내 캐릭터 노드에 배틀 시작 방어 플래그 설정
+		if _player and is_instance_valid(_player):
+			_player.set_physics_process(false)  # 준비 완료까지 움직이지 않음
+		
+		print("[Battle] LOADING: 상대방 준비 대기 중... peers=%s" % str(_peers_ready.keys()))
+		
+		# 상대방에게 준비 완료 신호 전송
+		rpc("_on_peer_battle_ready", _get_my_peer_id())
+		
+		# 타임아웃 (5초 내 준비 안되면 강제 시작)
+		get_tree().create_timer(5.0).timeout.connect(_force_start_if_loading)
+	else:
+		# 싱글플레이: 즉시 PLAYING
+		_battle_phase = BattlePhase.PLAYING
+		print("[Battle] PLAYING (singleplayer)")
+	
 	battle_started.emit()
 
 
 func end_battle(winning_team: int) -> void:
+	# 방어: 이미 종료 중이면 무시 (중복 호출 방지)
+	if _battle_phase == BattlePhase.ENDING or _battle_phase == BattlePhase.DONE:
+		print("[Battle] end_battle 중복 호출 무시 (phase=%s)" % BattlePhase.keys()[_battle_phase])
+		return
+	
+	print("[Battle] end_battle: winning_team=%d, phase=%s" % [winning_team, BattlePhase.keys()[_battle_phase]])
+	
+	_battle_phase = BattlePhase.ENDING
 	_is_battle_active = false
 	battle_ended.emit(winning_team)
 	
-	# 모든 캐릭터의 물리 업데이트 중지 (이동 및 네트워크 RPC 전송 방지)
+	# ── 즉시 모든 게임플레이 동작 정지 ──
+	_freeze_all_characters()
+	_cleanup_projectiles()
+	
+	# ── 멀티플레이어: 상대에게 배틀 종료 통보 ──
+	if _is_multiplayer and _remote_players.size() > 0:
+		_peers_ended.clear()
+		for peer_id in _remote_players:
+			_peers_ended[peer_id] = false
+		
+		print("[Battle] ENDING: 상대방 종료 확인 대기 중...")
+		rpc("_on_peer_battle_ended", _get_my_peer_id(), winning_team)
+		
+		# 타임아웃 (3초 내 확인 안되면 강제 전환)
+		get_tree().create_timer(3.0).timeout.connect(
+			func():
+				if _battle_phase == BattlePhase.ENDING:
+					print("[Battle] WARNING: 종료 확인 타임아웃, 강제 전환")
+					_transition_to_result(winning_team)
+		)
+	else:
+		# 싱글플레이: 즉시 결과 전환 예약
+		_transition_to_result(winning_team)
+
+
+## 모든 캐릭터의 물리 업데이트 중지
+func _freeze_all_characters() -> void:
 	if _player and is_instance_valid(_player):
 		_player.set_physics_process(false)
+		_player.set_process(false)
 	for enemy in _enemies:
 		if is_instance_valid(enemy):
 			enemy.set_physics_process(false)
-	
-	# 남아 있는 투사체 제거 (지연 데미지로 인한 RPC 방지)
+			enemy.set_process(false)
+	for peer_id in _remote_players:
+		var character: Character = _remote_players[peer_id]
+		if is_instance_valid(character):
+			character.set_physics_process(false)
+			character.set_process(false)
+
+
+## 남아있는 투사체 제거
+func _cleanup_projectiles() -> void:
 	for child in get_children():
 		if child is Projectile:
 			child.queue_free()
+
+
+## 결과 화면 전환 (2초 딜레이)
+func _transition_to_result(winning_team: int) -> void:
+	if _battle_phase == BattlePhase.DONE:
+		return
 	
-	# winning_team: 0 = 플레이어 승리, 1 = 적 승리
 	var is_victory := (winning_team == 0)
+	_battle_phase = BattlePhase.DONE
+	print("[Battle] DONE: 결과 화면 전환 예약 (승리=%s)" % str(is_victory))
 	
 	# 2초 후 결과 화면으로 전환
 	get_tree().create_timer(2.0).timeout.connect(
@@ -379,8 +485,18 @@ func _clear_battle() -> void:
 			enemy.queue_free()
 	_enemies.clear()
 	
+	# 네트워크 플레이어 정리
+	for peer_id in _remote_players:
+		var character: Character = _remote_players[peer_id]
+		if is_instance_valid(character):
+			character.queue_free()
+	_remote_players.clear()
+	_peers_ready.clear()
+	_peers_ended.clear()
+	
 	_is_battle_active = false
 	_battle_time = 0.0
+	_battle_phase = BattlePhase.NONE
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Character Spawning
@@ -474,6 +590,10 @@ func spawn_enemy_at_random_position(character_id: String) -> Character:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 func _check_battle_end_conditions() -> void:
+	# 방어: PLAYING 상태에서만 판정
+	if _battle_phase != BattlePhase.PLAYING:
+		return
+	
 	# 플레이어 사망 체크
 	if _player and _player.is_dead:
 		end_battle(1)  # 적 팀 승리
@@ -526,7 +646,9 @@ func _on_enemy_died(enemy: Character) -> void:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 func setup_network_player(peer_id: int, character_id: String, is_local: bool, spawn_pos: Vector2 = Vector2.ZERO) -> Character:
-	#print("[DEBUG] setup_network_player: peer_id=%s, char_id=%s, is_local=%s, pos=%s" % [peer_id, character_id, is_local, spawn_pos])
+	assert(peer_id > 0, "setup_network_player: peer_id must be > 0, got %d" % peer_id)
+	assert(not character_id.is_empty(), "setup_network_player: character_id must not be empty")
+	
 	var data := _registry.get_character(character_id)
 	if not data:
 		push_error("Network character not found: " + character_id)
@@ -549,7 +671,8 @@ func setup_network_player(peer_id: int, character_id: String, is_local: bool, sp
 	# 해당 peer가 이 노드의 RPC를 제어
 	character.set_multiplayer_authority(peer_id)
 	
-	#print("[DEBUG] Network player name set: %s, is_network_controlled=%s, authority=%s" % [character.name, character.is_network_controlled(), character.get_multiplayer_authority()])
+	print("[Battle] Network player: name=%s, peer=%d, local=%s, authority=%d" % [
+		character.name, peer_id, is_local, character.get_multiplayer_authority()])
 	
 	# force_readable_name=true로 RPC 경로 일치 보장
 	add_child(character, true)
@@ -565,3 +688,101 @@ func setup_network_player(peer_id: int, character_id: String, is_local: bool, sp
 		enemy_spawned.emit(character)
 	
 	return character
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Battle Handshake RPC (배틀 시작/종료 핸드셰이크)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+## 상대방이 배틀 준비 완료를 알려옴
+@rpc("any_peer", "call_remote", "reliable")
+func _on_peer_battle_ready(peer_id: int) -> void:
+	print("[Battle] Peer ready received: peer_id=%d, current_phase=%s" % [peer_id, BattlePhase.keys()[_battle_phase]])
+	
+	# 방어: LOADING 상태가 아니면 무시 (늦게 도착한 패킷)
+	if _battle_phase != BattlePhase.LOADING:
+		print("[Battle] WARNING: peer_ready 무시 (phase=%s)" % BattlePhase.keys()[_battle_phase])
+		return
+	
+	_peers_ready[peer_id] = true
+	_check_all_peers_ready()
+
+
+## 모든 peer가 준비되었는지 확인
+func _check_all_peers_ready() -> void:
+	for peer_id in _peers_ready:
+		if not _peers_ready[peer_id]:
+			return
+	
+	# 모두 준비 완료 → PLAYING 전환
+	print("[Battle] All peers ready! → PLAYING")
+	_battle_phase = BattlePhase.PLAYING
+	
+	# 플레이어 물리 활성화
+	if _player and is_instance_valid(_player):
+		_player.set_physics_process(true)
+
+
+## LOADING 상태에서 타임아웃 시 강제 시작
+func _force_start_if_loading() -> void:
+	if _battle_phase == BattlePhase.LOADING:
+		print("[Battle] WARNING: 준비 대기 타임아웃 (5초), 강제 PLAYING 전환")
+		for peer_id in _peers_ready:
+			if not _peers_ready[peer_id]:
+				print("[Battle]   미응답 peer: %d" % peer_id)
+		_battle_phase = BattlePhase.PLAYING
+		if _player and is_instance_valid(_player):
+			_player.set_physics_process(true)
+
+
+## 상대방이 배틀 종료를 알려옴
+@rpc("any_peer", "call_remote", "reliable")
+func _on_peer_battle_ended(peer_id: int, winning_team: int) -> void:
+	print("[Battle] Peer ended received: peer_id=%d, winning_team=%d, phase=%s" % [
+		peer_id, winning_team, BattlePhase.keys()[_battle_phase]])
+	
+	# 상대가 먼저 종료 통보 → 내 쪽도 종료 처리
+	if _battle_phase == BattlePhase.PLAYING:
+		print("[Battle] 상대방이 먼저 종료 판정, 동기화하여 종료")
+		end_battle(winning_team)
+		return
+	
+	# 내가 먼저 종료 판정한 경우 → 확인 처리
+	if _battle_phase == BattlePhase.ENDING:
+		_peers_ended[peer_id] = true
+		_check_all_peers_ended(winning_team)
+		return
+	
+	print("[Battle] WARNING: peer_ended 무시 (phase=%s)" % BattlePhase.keys()[_battle_phase])
+
+
+## 모든 peer가 종료를 확인했는지 확인
+func _check_all_peers_ended(winning_team: int) -> void:
+	for peer_id in _peers_ended:
+		if not _peers_ended[peer_id]:
+			return
+	
+	print("[Battle] All peers confirmed end → DONE")
+	_transition_to_result(winning_team)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Debug / Diagnostics
+# ═══════════════════════════════════════════════════════════════════════════════
+
+## 현재 배틀 상태 진단 정보
+func get_battle_phase_name() -> String:
+	return BattlePhase.keys()[_battle_phase]
+
+
+func get_diagnostic_info() -> Dictionary:
+	return {
+		"phase": get_battle_phase_name(),
+		"is_active": _is_battle_active,
+		"is_multiplayer": _is_multiplayer,
+		"battle_time": _battle_time,
+		"player_valid": _player != null and is_instance_valid(_player),
+		"enemy_count": _enemies.size(),
+		"remote_player_count": _remote_players.size(),
+		"peers_ready": _peers_ready.duplicate(),
+		"peers_ended": _peers_ended.duplicate(),
+	}

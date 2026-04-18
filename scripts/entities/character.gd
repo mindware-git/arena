@@ -402,6 +402,11 @@ func take_damage(amount: int) -> void:
 	if _is_dead:
 		return
 	
+	# 방어: 노드가 트리에서 제거 중이면 무시
+	if not is_inside_tree():
+		print("[Character] WARNING: take_damage 무시 (트리 밖)")
+		return
+	
 	_current_hp = maxi(0, _current_hp - amount)
 	hp_changed.emit(_current_hp, _data.max_hp)
 	_update_hp_bar()
@@ -410,15 +415,22 @@ func take_damage(amount: int) -> void:
 		if not _is_network_controlled:
 			# 내가 Owner인 경우: 사망 판정 후 브로드캐스트
 			_die()
-			rpc("sync_death")
+			if is_inside_tree() and multiplayer.has_multiplayer_peer():
+				rpc("sync_death")
 		else:
 			# 내가 Owner가 아닌 경우: 화면에서만 숨기고 공식 사망(sync_death) 대기
 			visible = false
 
 @rpc("any_peer", "call_remote", "reliable")
 func sync_death() -> void:
-	if not _is_dead:
-		_die()
+	# 방어: 이미 죽었으면 무시 (중복 패킷)
+	if _is_dead:
+		return
+	# 방어: 트리 밖이면 무시
+	if not is_inside_tree():
+		print("[Character] WARNING: sync_death 무시 (트리 밖)")
+		return
+	_die()
 
 ## 다른 캐릭터에게 데미지 적용 (Owner 클라이언트가 실행)
 func apply_damage_to(target: Character, amount: int) -> void:
@@ -812,6 +824,10 @@ func is_network_controlled() -> bool:
 
 
 func _sync_position_periodically() -> void:
+	# 방어: 죽었거나 트리에 없으면 동기화하지 않음
+	if _is_dead or not is_inside_tree():
+		return
+	
 	# 온라인 플레이가 아니면 동기화하지 않음
 	if not OnlineMatch.nakama_socket or OnlineMatch.get_match_id().is_empty():
 		return
@@ -827,13 +843,17 @@ func _sync_position_periodically() -> void:
 
 @rpc("any_peer", "unreliable")
 func sync_remote_position(_pos: Vector2, _vel: Vector2, _facing: Vector2, _hp: int) -> void:
-	# 원격 플레이어 위치 업데이트
-	if _is_network_controlled:
-		position = _pos
-		velocity = _vel
-		_facing_direction = _facing
-		_current_hp = _hp
-		_update_hp_bar()
+	# 방어: 원격 플레이어가 아니면 무시
+	if not _is_network_controlled:
+		return
+	# 방어: 이미 죽었거나 트리 밖이면 무시
+	if _is_dead or not is_inside_tree():
+		return
+	position = _pos
+	velocity = _vel
+	_facing_direction = _facing
+	_current_hp = _hp
+	_update_hp_bar()
 
 
 func _sync_projectile_spawn(
@@ -851,6 +871,11 @@ func _spawn_remote_projectile(
 	dir: Vector2, speed: float, damage: int, pos: Vector2,
 	max_range: float, element: int, is_special: bool
 ) -> void:
+	# 방어: 트리 밖이거나 죽었으면 무시
+	if not is_inside_tree() or _is_dead:
+		print("[Character] WARNING: _spawn_remote_projectile 무시 (dead=%s, in_tree=%s)" % [_is_dead, is_inside_tree()])
+		return
+	
 	# 원격 클라이언트에서 시각 전용 투사체 생성 (데미지 판정 없음)
 	var projectile := Projectile.new()
 	projectile.init(
