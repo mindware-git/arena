@@ -197,21 +197,41 @@ func start_playing() -> void:
 
 
 func leave(close_socket: bool = false) -> void:
-	# Nakama disconnect.
+	# 로컬 참조 저장 (await 후에도 사용하기 위해)
+	var _socket = nakama_socket
+	var _ticket = matchmaker_ticket
+	
+	# ── 동기적 정리 (await 전에 모두 완료) ──
+	
+	# Bridge 정리 (시그널 해제 + leave)
 	if nakama_multiplayer_bridge:
+		if nakama_multiplayer_bridge.is_connected("match_joined", Callable(self, "_on_match_joined")):
+			nakama_multiplayer_bridge.disconnect("match_joined", Callable(self, "_on_match_joined"))
+		if nakama_multiplayer_bridge.is_connected("match_join_error", Callable(self, "_on_match_join_error")):
+			nakama_multiplayer_bridge.disconnect("match_join_error", Callable(self, "_on_match_join_error"))
 		nakama_multiplayer_bridge.leave()
+		nakama_multiplayer_bridge = null
+		multiplayer.multiplayer_peer = null
+	
+	# 소켓 시그널 해제 + 참조 즉시 null (재초기화 허용)
 	if nakama_socket:
-		if matchmaker_ticket:
-			await nakama_socket.remove_matchmaker_async(matchmaker_ticket)
-		if close_socket:
-			nakama_socket.close()
-			_set_nakama_socket(null)
-
-	# Initialize all the variables to their default state.
+		if nakama_socket.is_connected("closed", Callable(self, "_on_nakama_socket_closed")):
+			nakama_socket.disconnect("closed", Callable(self, "_on_nakama_socket_closed"))
+		nakama_socket = null
+	
+	# 모든 변수 즉시 초기화
 	match_id = ''
+	matchmaker_ticket = ''
 	players = {}
 	match_state = MatchState.LOBBY
 	match_mode = MatchMode.NONE
+	
+	# ── 비동기 정리 (로컬 참조 사용, 위 상태에 영향 없음) ──
+	if _socket:
+		if _ticket:
+			await _socket.remove_matchmaker_async(_ticket)
+		if close_socket:
+			_socket.close()
 
 
 func get_match_id() -> String:
