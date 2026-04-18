@@ -56,4 +56,3 @@ static func _init_cards() -> void:
 	_register("card_19", "시간 정지", 4, Color(0.1, 0.9, 0.8))
 	_register("card_20", "신의 심판", 4, Color(1.0, 1.0, 0.8))
 	_register("card_21", "광폭화", 4, Color(0.6, 0.0, 0.0)).add_modifier("melee_power", 0.0, 1.2)
-

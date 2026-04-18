@@ -338,6 +338,18 @@ func end_battle(winning_team: int) -> void:
 	_is_battle_active = false
 	battle_ended.emit(winning_team)
 	
+	# 모든 캐릭터의 물리 업데이트 중지 (이동 및 네트워크 RPC 전송 방지)
+	if _player and is_instance_valid(_player):
+		_player.set_physics_process(false)
+	for enemy in _enemies:
+		if is_instance_valid(enemy):
+			enemy.set_physics_process(false)
+	
+	# 남아 있는 투사체 제거 (지연 데미지로 인한 RPC 방지)
+	for child in get_children():
+		if child is Projectile:
+			child.queue_free()
+	
 	# winning_team: 0 = 플레이어 승리, 1 = 적 승리
 	var is_victory := (winning_team == 0)
 	
