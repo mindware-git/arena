@@ -1,5 +1,9 @@
-[gd_scene format=3 uid="uid://bxkvngrjgv6ui"]
+[gd_scene format=4 uid="uid://bxkvngrjgv6ui"]
+
+[ext_resource type="TileSet" uid="uid://d0aj1k5qjflbt" path="res://asset/tile/prop_tile.tres" id="1_jo0wo"]
 
 [node name="Dragon" type="Node2D" unique_id=376269474]
 
 [node name="TileMapLayer" type="TileMapLayer" parent="." unique_id=876607576]
+tile_map_data = PackedByteArray("AAAbAAsAAAAOAAAAAAAbAAwAAAAOAAEAAAAbAA0AAAAOAAIAAAAlABAAAAAOAAAAAAAlABEAAAAOAAEAAAAlABIAAAAOAAIAAAADAAEAAAAOAAAAAAADAAIAAAAOAAEAAAADAAMAAAAOAAIAAAAHABEAAAAOAAAAAAAHABIAAAAOAAEAAAAHABMAAAAOAAIAAAA=")
+tile_set = ExtResource("1_jo0wo")

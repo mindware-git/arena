@@ -29,7 +29,7 @@ const ENEMY_SPAWN_POSITIONS: Array[Vector2] = [
 ]
 
 const BATTLE_HUD_SCENE = preload("res://scenes/ui/battle_hud.tscn")
-
+const MAP_DRAGON_SCENE = preload("res://scenes/map/dragon.tscn")
 # ═══════════════════════════════════════════════════════════════════════════════
 # Variables
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -81,6 +81,11 @@ var battle_time: float:
 
 func _ready() -> void:
 	_registry = CharacterRegistry.new()
+	
+	# 드래곤 맵 로드 및 추가
+	var map := MAP_DRAGON_SCENE.instantiate()
+	add_child(map)
+	
 	_create_battle_ui()
 	
 	# 대기 중인 배틀 데이터가 있으면 시작
@@ -297,7 +302,6 @@ func start_battle(
 	_kill_count = 0
 	
 	# 내 플레이어 스폰 (로컬 제어)
-	#print("[DEBUG] Spawning local player: %s" % my_character_id)
 	spawn_player(my_character_id)
 	
 	# 아군 스폰 (네트워크 제어)
@@ -312,12 +316,10 @@ func start_battle(
 	# 적군 스폰 (네트워크 제어 또는 기본 AI 적)
 	if enemies.is_empty():
 		# 기본 AI 적 스폰
-		#print("[DEBUG] No enemies provided, spawning AI enemies")
 		for i in range(ENEMY_SPAWN_POSITIONS.size()):
 			spawn_enemy("enemy_slime", ENEMY_SPAWN_POSITIONS[i])
 	else:
 		# 네트워크 플레이어 적 스폰
-		#print("[DEBUG] Spawning network player enemies: %s" % enemies)
 		for i in range(enemies.size()):
 			var enemy := enemies[i]
 			var peer_id: int = enemy.get("peer_id", 0)
@@ -369,7 +371,9 @@ func spawn_player(character_id: String) -> Character:
 	_player = Character.new()
 	_player.is_controllable = true  # init() 전에 설정해야 카메라가 활성화됨
 	_player.init(data)
-	_player.position = PLAYER_SPAWN_POSITION
+	
+	var random_offset := Vector2(randf_range(-20, 20), randf_range(-20, 20))
+	_player.position = PLAYER_SPAWN_POSITION + random_offset
 	
 	# 노드 이름을 내 peer_id로 설정 (RPC 경로 일치)
 	# OnlineMatch.players의 키 중 하나가 내 peer_id
@@ -419,7 +423,11 @@ func spawn_enemy(character_id: String, position: Vector2 = Vector2.ZERO) -> Char
 	
 	var enemy := Character.new()
 	enemy.init(data)
-	enemy.position = position if position != Vector2.ZERO else ENEMY_SPAWN_POSITIONS[_enemies.size() % ENEMY_SPAWN_POSITIONS.size()]
+	
+	var final_pos := position if position != Vector2.ZERO else ENEMY_SPAWN_POSITIONS[_enemies.size() % ENEMY_SPAWN_POSITIONS.size()]
+	var random_offset := Vector2(randf_range(-20, 20), randf_range(-20, 20))
+	enemy.position = final_pos + random_offset
+	
 	enemy.is_controllable = false
 	
 	# 시그널 연결
@@ -512,7 +520,11 @@ func setup_network_player(peer_id: int, character_id: String, is_local: bool, sp
 	var character := Character.new()
 	character.is_controllable = is_local  # init() 전에 설정
 	character.init(data)
-	character.position = spawn_pos if spawn_pos != Vector2.ZERO else PLAYER_SPAWN_POSITION
+	
+	var final_pos := spawn_pos if spawn_pos != Vector2.ZERO else PLAYER_SPAWN_POSITION
+	var random_offset := Vector2(randf_range(-20, 20), randf_range(-20, 20))
+	character.position = final_pos + random_offset
+	
 	character.set_network_controlled(not is_local)
 	
 	# 노드 이름을 peer_id로 설정 (RPC 경로 일치)
