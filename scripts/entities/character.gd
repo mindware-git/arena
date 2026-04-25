@@ -56,6 +56,12 @@ var _hp_bar: ProgressBar = null
 var _is_boosting: bool = false
 var _booster_timer: float = 0.0
 
+# 더블탭 대시
+const DOUBLE_TAP_WINDOW: float = 0.3  # 더블탭 허용 시간 (초)
+var _double_tap_timer: float = 0.0     # 릴리즈 후 남은 윈도우 시간
+var _joy_was_pressed: bool = false      # 이전 프레임 조이스틱 상태
+var _joy_waiting_second_tap: bool = false  # 첫 탭 후 두 번째 탭 대기 중
+
 # 공격 쿨다운 (attack_index -> timer)
 var _cooldowns: Dictionary = {}
 
@@ -312,6 +318,7 @@ func _physics_process(delta: float) -> void:
 	_regen_mp(delta)
 	_handle_booster(delta)
 	_handle_melee_hitbox(delta)
+	_update_double_tap_timer(delta)
 	
 	# 네트워크 동기화 처리
 	if _is_network_controlled:
@@ -321,6 +328,7 @@ func _physics_process(delta: float) -> void:
 		# 로컬 플레이어만 입력 처리
 		_move(delta)
 		_handle_input()
+		_detect_joystick_double_tap()
 		move_and_slide()
 		
 		# 네트워크 동기화 전송
@@ -379,7 +387,7 @@ func _move(delta: float) -> void:
 
 
 func _handle_input() -> void:
-	# 부스터 입력
+	# 부스터 입력 (버튼 방식 - 호환성 유지)
 	if Input.is_action_just_pressed("booster"):
 		start_boost()
 	elif Input.is_action_just_released("booster"):
@@ -392,6 +400,61 @@ func _handle_input() -> void:
 		execute_attack_by_index(1)
 	if Input.is_action_just_pressed("attack_special"):
 		execute_attack_by_index(2)
+
+
+## 조이스틱 더블탭 감지 (매 프레임 조이스틱 상태 변화 추적)
+func _detect_joystick_double_tap() -> void:
+	var joystick = _find_virtual_joystick()
+	if not joystick:
+		return
+	
+	var is_pressed: bool = joystick.is_pressed
+	
+	# 상태 전환 감지
+	if _joy_was_pressed and not is_pressed:
+		# 릴리즈 감지
+		if _is_boosting:
+			# 대시 중 릴리즈 → 대시 종료
+			stop_boost()
+		else:
+			# 첫 탭 릴리즈 → 더블탭 윈도우 시작
+			_joy_waiting_second_tap = true
+			_double_tap_timer = DOUBLE_TAP_WINDOW
+	elif not _joy_was_pressed and is_pressed:
+		# 프레스 감지
+		if _joy_waiting_second_tap and _double_tap_timer > 0.0:
+			# 윈도우 내 재터치 → 대시!
+			start_boost()
+			_joy_waiting_second_tap = false
+			_double_tap_timer = 0.0
+	
+	_joy_was_pressed = is_pressed
+
+
+## 더블탭 타이머 업데이트
+func _update_double_tap_timer(delta: float) -> void:
+	if _double_tap_timer > 0.0:
+		_double_tap_timer = maxf(0.0, _double_tap_timer - delta)
+		if _double_tap_timer <= 0.0:
+			_joy_waiting_second_tap = false
+
+
+## 외부에서 조이스틱 상태 변경 알림 (테스트용 + 커스텀 입력용)
+func notify_joystick_pressed() -> void:
+	if _joy_waiting_second_tap and _double_tap_timer > 0.0:
+		start_boost()
+		_joy_waiting_second_tap = false
+		_double_tap_timer = 0.0
+	_joy_was_pressed = true
+
+
+func notify_joystick_released() -> void:
+	if _is_boosting:
+		stop_boost()
+	else:
+		_joy_waiting_second_tap = true
+		_double_tap_timer = DOUBLE_TAP_WINDOW
+	_joy_was_pressed = false
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Stats
@@ -533,6 +596,7 @@ func start_boost() -> bool:
 	_is_boosting = true
 	_booster_timer = 0.0
 	booster_changed.emit(true)
+	print("[Character] %s - BOOST START" % (_data.display_name if _data else "?"))
 	return true
 
 

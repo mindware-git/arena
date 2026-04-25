@@ -18,10 +18,10 @@ config/icon="res://icon.svg"
 [autoload]
 
 Nakama="*uid://da4041n40wpf3"
-Online="*res://scripts/autoload/Online.gd"
-OnlineMatch="*res://scripts/autoload/OnlineMatch.gd"
-GameState="*res://scripts/autoload/GameState.gd"
-GameManager="*res://scripts/autoload/GameManager.gd"
+Online="*res://scripts/autoload/online.gd"
+OnlineMatch="*res://scripts/autoload/online_match.gd"
+GameState="*res://scripts/autoload/game_state.gd"
+GameManager="*res://scripts/autoload/game_manager.gd"
 
 [display]
 
@@ -64,7 +64,7 @@ pointing/emulate_mouse_from_touch=false
 
 [network]
 
-nakama/host="127.0.0.1"
+nakama/host="168.107.26.200"
 nakama/server_key="defaultkey"
 nakama/port=7350
 
